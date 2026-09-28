@@ -52,6 +52,12 @@ neemt die enkel in gebruik als je ermee ingelogd bent, of als de oude sessie ook
 werkte. Aanleiding: Henry Schein's logincookie `MSCSAuth` is een sessiecookie die Chrome bij
 herstart kwijt is — het venster openen overschreef een geldige sessie.
 
+**v1.0.8 — loginvenster start al ingelogd:** bijna elke winkel onthoudt de login in een
+sessiecookie (PHPSESSID, MSCSAuth, .AspNet.ApplicationCookie…) die Chrome bij afsluiten
+weggooit. `login.py` start Chrome nu op `about:blank`, zet met `restore_cookies()` de cookies
+uit `sessions/<site>.json` terug die Chrome niet heeft (`Storage.setCookies`) en laadt pas
+dan de winkel. Wachtwoorden: Chrome's eigen wachtwoordbeheer in het winkelprofiel.
+
 Eerder (v1.0.2): `AllowSetForegroundWindow` + `page.bring_to_front()` (venster vooraan),
 cookie-fallback `Network.getAllCookies`, logregels `[login <site>] N cookies bewaard`.
 Let op: GitHub-runners krijgen bij Dental Discount een Cloudflare-controle → 0 cookies;

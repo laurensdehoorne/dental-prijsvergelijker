@@ -94,6 +94,39 @@ def snapshot(browser, ctx):
     }
 
 
+COOKIE_KEYS = ("name", "value", "domain", "path", "secure", "httpOnly", "sameSite")
+
+
+def restore_cookies(browser, site):
+    """Bewaarde cookies die Chrome niet (meer) heeft terugzetten, vóór de winkel laadt.
+    Bijna elke winkel onthoudt de login in een sessiecookie (PHPSESSID, MSCSAuth, ...)
+    die Chrome bij afsluiten weggooit; zonder dit begon het loginvenster altijd afgemeld."""
+    try:
+        saved = json.loads((SESSIONS / f"{site}.json").read_text()).get("cookies", [])
+    except (OSError, ValueError):
+        return 0
+    cdp = browser.new_browser_cdp_session()
+    try:
+        have = {(c["name"], c["domain"], c["path"]) for c in cdp.send("Storage.getCookies")["cookies"]}
+        now = time.time()
+        todo = []
+        for c in saved:
+            if (c.get("name"), c.get("domain"), c.get("path")) in have or c.get("partitionKey"):
+                continue
+            exp = c.get("expires", -1)
+            if not c.get("session") and exp > 0 and exp < now:
+                continue  # verlopen
+            param = {k: c[k] for k in COOKIE_KEYS if k in c}
+            if not c.get("session") and exp > 0:
+                param["expires"] = exp
+            todo.append(param)
+        if todo:
+            cdp.send("Storage.setCookies", {"cookies": todo})
+        return len(todo)
+    finally:
+        cdp.detach()
+
+
 def open_tabs(port):
     """Aantal open tabbladen volgens Chrome zelf (betrouwbaarder dan bijhouden)."""
     try:
@@ -211,7 +244,7 @@ def main(site):
         "--no-first-run",
         "--no-default-browser-check",
         "--window-size=1100,850",
-        LOGIN_URLS[site],
+        "about:blank",  # winkel pas laden nadat de bewaarde cookies terug zijn (restore_cookies)
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=browser_env())
     threading.Thread(target=watchdog, args=(chrome, port, site), daemon=True).start()
 
@@ -230,6 +263,13 @@ def main(site):
                     time.sleep(0.5)
             if browser is None:
                 return
+            try:
+                n = restore_cookies(browser, site)
+                if n:
+                    print(f"[login {site}] {n} bewaarde cookies teruggezet", flush=True)
+            except Exception as e:
+                print(f"[login {site}] cookies terugzetten mislukt: {e}", flush=True)
+            opened = False
 
             started = time.time()
             seen_page = False
@@ -237,6 +277,12 @@ def main(site):
             last_count = -1
             while browser.is_connected() and alive(chrome, port):
                 tabs = open_tabs(port)
+                if tabs > 0 and not opened and browser.contexts and browser.contexts[0].pages:
+                    opened = True
+                    try:
+                        browser.contexts[0].pages[0].goto(LOGIN_URLS[site], wait_until="commit")
+                    except Error:
+                        pass
                 if tabs > 0 and not seen_page:
                     seen_page = True
                     bring_to_front(chrome.pid)
