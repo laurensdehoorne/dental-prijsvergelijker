@@ -11,12 +11,15 @@
     --bad: #b42318;
     --c-dentaldiscount: #e2560f; --c-basiq: #0f6fde; --c-dentaladdict: #7a3fd1; --c-hofmeester: #0e8a7d;
     --c-denta: #c2185b; --c-henryschein: #1f3f8f; --c-adt: #b8860b;
+    color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #121417; --card: #1b1e23; --text: #e8eaed; --muted: #9aa1ab; --line: #2c3138;
       --accent: #5aa2ff; --good: #5fd08f; --good-bg: #173424; --warn: #f0b458; --warn-bg: #3a2a10;
       --bad: #ff7b72;
+      --c-henryschein: #6f8fe0; --c-dentaladdict: #a77ff0;
+      color-scheme: dark;  /* vinkjes, invoervelden, schuifbalken ook donker */
     }
   }
   * { box-sizing: border-box; }
@@ -59,8 +62,9 @@
   th.num, td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   tr:last-child td { border-bottom: 0; }
   td img { width: 44px; height: 44px; object-fit: contain; background: #fff; border-radius: 6px; display: block; }
-  td a { color: var(--text); text-decoration: none; }
-  td a:hover { color: var(--accent); text-decoration: underline; }
+  a { color: var(--accent); }
+  td a, .row .n a { color: var(--text); text-decoration: none; }
+  td a:hover, .row .n a:hover { color: var(--accent); text-decoration: underline; }
   .code { color: var(--muted); font-size: 12px; }
   .tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
   .old { color: var(--muted); text-decoration: line-through; font-size: 12px; margin-right: 4px; }
@@ -88,7 +92,7 @@
   .cartsum b { font-size: 15px; }
   .settings td, .settings th { padding: 6px 8px; }
   .settings input { width: 90px; }
-  .weak { opacity: .5; }
+  .weak { opacity: .6; }
   .weak:hover { opacity: 1; }
   .best { background: var(--good-bg); }
   .best .pp { color: var(--good); font-weight: 700; }
