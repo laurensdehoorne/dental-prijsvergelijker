@@ -309,14 +309,20 @@ const isOn = s => enabled[s] !== false;
 let wasLoggedIn = new Set(JSON.parse(localStorageGet("wasLoggedIn") || "[]"));
 function saveWasLoggedIn() { localStorageSet("wasLoggedIn", JSON.stringify([...wasLoggedIn])); }
 
+let statusTimer, loginOpen = new Set();
 async function loadStatus() {
   shops = await (await fetch("/api/status")).json();
   for (const [k, st] of Object.entries(shops)) if (st.logged_in) wasLoggedIn.add(k);
   saveWasLoggedIn();
   renderShops();
   renderNotices();
-  // Blijf pollen zolang er een loginvenster open is
-  if (Object.values(shops).some(s => s.login_open)) setTimeout(loadStatus, 3000);
+  // loginvenster gesloten: afnamelijsten van die winkel (en 'eerder besteld') bijwerken
+  const closed = [...loginOpen].filter(k => !shops[k]?.login_open);
+  loginOpen = new Set(Object.keys(shops).filter(k => shops[k].login_open));
+  if (closed.length) loadShopLists(true, true);
+  // Blijf pollen zolang er een loginvenster open is (één timer, ook als loadStatus vaker loopt)
+  clearTimeout(statusTimer);
+  if (loginOpen.size) statusTimer = setTimeout(loadStatus, 3000);
 }
 
 function renderNotices() {
@@ -576,12 +582,13 @@ async function refreshAll(btn) {
   btn.innerHTML = `<span class="spinner"></span>Vernieuwen (${all.length})…`;
   try {
     const res = await (await fetch("/api/refresh", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: all.map(({ site, code, name }) => ({ site, code, name })) }) })).json();
+      body: JSON.stringify({ items: all.map(({ site, code, name, url }) => ({ site, code, name, url })) }) })).json();
     res.items.forEach((fresh, i) => {
       const it = all[i];
       if (!fresh) { it.missing = true; return; }
       if (fresh.price != null && it.price != null && fresh.price !== it.price) it.prev_price = it.price;
-      Object.assign(it, { price: fresh.price, old_price: fresh.old_price, volume_price: fresh.volume_price,
+      Object.assign(it, { code: fresh.code, price: fresh.price, old_price: fresh.old_price, volume_price: fresh.volume_price,
+                          from_price: !!fresh.from_price,
                           url: fresh.url, image: fresh.image || it.image, brand: fresh.brand || it.brand || "",
                           missing: false, updated: today() });
     });
@@ -657,7 +664,8 @@ function allItems() {
 
 function priceCell(it) {
   if (it.price == null) return `<span class="none">log in<span class="hint"> voor prijs</span></span>`;
-  let s = (it.old_price ? `<span class="old">${eur(it.old_price)}</span>` : "") + `<b>${eur(it.price)}</b>`;
+  let s = (it.old_price ? `<span class="old">${eur(it.old_price)}</span>` : "") +
+    (it.from_price ? `<small title="Laagste prijs van de verpakkingen">vanaf </small>` : "") + `<b>${eur(it.price)}</b>`;
   if (it.volume_price) s += `<span class="range"><span class="hint">staffel: </span>vanaf ${eur(it.volume_price)} bij grote aantallen</span>`;
   return s;
 }
@@ -897,6 +905,7 @@ document.getElementById("shipDlg").addEventListener("close", async () => {
 
 // ---------- Winkellijsten: afnamelijsten en favorieten uit je account bij de winkels ----------
 let shopLists = null, slQuery = "", slShown = [], listsTime = 0, listsRefreshing = false, listsTimer;
+const slOpen = new Map();  // "winkel|lijst" -> open/dicht zoals de gebruiker het zette
 // "eerder besteld": producten uit een afnamelijst/artikelhistoriek, op artikelnummer of productlink
 let orderedIdx = new Map();
 const cleanUrl = u => String(u || "").replace(/[?#].*$/, "").replace(/\/+$/, "").toLowerCase();
@@ -956,8 +965,9 @@ function renderShopLists() {
       const items = l.items.filter(hit).map(it => ({ ...it, pp: it.price != null && it.pieces ? it.price / it.pieces : null }));
       found += items.length;
       if (!items.length) continue;
-      const open = words.length || l.items.length <= 12 ? "open" : "";
-      cards.push(`<details class="group" ${open}><summary><h2><span class="dot" style="background:${COLORS[site]}"></span>${esc(label)}
+      const key = site + "|" + l.name;
+      const open = words.length || (slOpen.has(key) ? slOpen.get(key) : l.items.length <= 12) ? "open" : "";
+      cards.push(`<details class="group" data-key="${esc(key)}" ${open}><summary><h2><span class="dot" style="background:${COLORS[site]}"></span>${esc(label)}
           <span class="sub">${esc(l.name)} · ${items.length}${items.length < l.items.length ? " van " + l.items.length : ""} producten</span></h2></summary>
         <table><tbody>${items.map(it => {
           slShown.push(it); const i = slShown.length - 1;
@@ -992,6 +1002,12 @@ function renderShopLists() {
 document.getElementById("slQ").addEventListener("input", e => { slQuery = e.target.value; renderShopLists(); });
 document.getElementById("slReload").addEventListener("click", () => loadShopLists(true));
 document.getElementById("slBody").addEventListener("click", e => {
+  const sum = e.target.closest("summary");
+  if (sum && !slQuery.trim()) {  // klik op de titel: nieuwe toestand onthouden (klik zelf opent/sluit)
+    const det = sum.parentElement;
+    slOpen.set(det.dataset.key, !det.open);
+    return;
+  }
   const d = e.target.dataset;
   if (d.find) return runSearch(d.find);
   if (d.slcart != null) return openCartDialog(slShown[d.slcart]);

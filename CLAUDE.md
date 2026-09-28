@@ -8,9 +8,12 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
 - `desktop_app.py` — ingang: start `app.py`-server (127.0.0.1:8765) in een thread en
   opent een pywebview-venster (Mac: WebKit, Windows: Edge WebView2).
   Met `--login <site>` draait hetzelfde programma als loginproces (ingepakte app).
-- `app.py` — HTTP-server + API (`/api/search`, `/api/status`, `/api/login/<site>`,
+- `app.py` — HTTP-server + API (weigert verzoeken van andere websites: Host/Origin moet localhost zijn) (`/api/search`, `/api/status`, `/api/login/<site>`,
   `/api/carts`, `/api/cart/add|remove`, `/api/favorites`, `/api/settings`).
 - `sites.py` — zoeken + "ben ik ingelogd?" per winkel (urllib, cookies uit sessiebestand).
+  Let op: Hofmeester toont "Uitloggen" ook aan wie niet ingelogd is; Ordent-check = geen "Inloggen".
+  Denta: zoekresultaten gebruiken het fabrikantnummer (niet het A-nummer); prijs uit `gtm-price`
+  (bij varianten met "Vanaf" → `from_price`).
 - Winkellijsten (`/api/lists`, tab 📋): per winkel `SITES[site]["lists"]()` → `[{name, items, ordered}]`.
   Ordent (DD/Hofmeester/ADT): `ajax/products.php?page_type=ordered|wishlist` (per 48); Basiq: bewaarde
   mandjes + afnamelijst uit laatste 60 bestellingen (OCC-API); Denta: `/artikelgeschiedenis/`.

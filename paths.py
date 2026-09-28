@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Prijsvergelijker"
-VERSION = "1.0.10"
+VERSION = "1.0.11"
 FROZEN = getattr(sys, "frozen", False)
 SRC = Path(__file__).parent
 RES = Path(getattr(sys, "_MEIPASS", SRC))

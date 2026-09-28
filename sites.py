@@ -98,9 +98,11 @@ def translate(query):
 
 
 def parse_euro(s):
-    """'€ 1.234,50' -> 1234.5 ; '5.50' -> 5.5 ; '4.-' -> 4.0"""
+    """'€ 1.234,50' -> 1234.5 ; '5.50' -> 5.5 ; '4.-' -> 4.0 ; '1.250,-' -> 1250.0"""
     s = html.unescape(s).replace("€", "").replace("\xa0", " ").strip()
-    s = s.replace(".-", "").replace(",-", "")
+    whole = re.search(r"(\d[\d.]*)[.,]-", s)  # '1.250,-' / '4.-': hele euro's, punt = duizendtal
+    if whole:
+        return float(whole.group(1).replace(".", ""))
     if "," in s:
         s = s.replace(".", "").replace(",", ".")
     m = re.search(r"\d+(?:\.\d+)?", s.replace(" ", ""))
@@ -168,7 +170,8 @@ class OrdentShop:
             _, body = http_get(self.base + self.home, {"Cookie": ck})
         except Exception:
             return False
-        return "Uitloggen" in body or "logout" in body
+        # Hofmeester toont 'Uitloggen' ook aan wie niet ingelogd is; 'Inloggen' staat er dan wel
+        return "Inloggen" not in body and ("Uitloggen" in body or "logout" in body)
 
     def search(self, query):
         params = urllib.parse.urlencode({
@@ -428,10 +431,10 @@ def denta_search(query):
         img = re.search(r'<img[^>]+src="([^"]+)"', b)
         # ingelogd: <span class="price-regular"><span class="gtm-price">8,95</span></span>
         #           <span class="price-old">9,94</span>  (zonder €-teken)
-        reg = re.search(r'class="price-regular">([\s\S]*?)</span>\s*</span>', b) or \
-            re.search(r'class="gtm-price">([^<]*)<', b)
+        # met verpakkingen/varianten staat er 'Vanaf' voor (price-from): de laagste prijs
+        reg = re.search(r'class="gtm-price">([^<]*)<', b)
         old_m = re.search(r'class="price-old">([^<]*)<', b)
-        price = parse_euro(strip_tags(reg.group(1))) if reg else None
+        price = parse_euro(reg.group(1)) if reg else None
         old = parse_euro(old_m.group(1)) if old_m else None
         items.append(item(
             "denta", code=strip_tags(codes[0]) if codes else "",
@@ -440,6 +443,8 @@ def denta_search(query):
             url=DENTA_BASE + href.group(1) if href else DENTA_BASE,
             image=urllib.parse.urljoin(DENTA_BASE, img.group(1)) if img else "",
         ))
+        if price and "price-from-label" in b:
+            items[-1]["from_price"] = True
     return items
 
 
@@ -452,11 +457,16 @@ def denta_lists():
         name = re.search(r'<p class="h4"><a href="([^"]+)">([\s\S]*?)</a>', b)
         if not name:
             continue
-        code = re.search(r'data-val="([^"]*)"', b)
+        # 'A52073-2525 - MSTRCPM625025': Denta-nummer - fabrikantnummer. De zoekresultaten
+        # (en dus Mijn lijst en 'Prijzen vernieuwen') gebruiken het fabrikantnummer.
+        size = re.search(r'<span class="size">([\s\S]*?)</span>', b)
+        codes = strip_tags(size.group(1)).split(" - ", 1) if size else []
+        code = codes[-1].strip() if codes else ""
         img = re.search(r'<img[^>]+src="([^"]+)"', b)
         last = re.search(r'tableCellDateLastBought">\s*(\d\d)/(\d\d)/(\d{4})', b)
-        it = item("denta", code=code.group(1) if code else "", name=strip_tags(name.group(2)),
-                  url=DENTA_BASE + name.group(1), image=img.group(1) if img else "")
+        url = DENTA_BASE + name.group(1)
+        it = item("denta", code=code, name=strip_tags(name.group(2)),
+                  url=url if url.endswith("/") else url + "/", image=img.group(1) if img else "")
         if last:
             it["last"] = f"{last.group(3)}-{last.group(2)}-{last.group(1)}"
         items.append(it)
@@ -605,10 +615,11 @@ SITES = {
 }
 
 
-def refresh(site, code, name, cache=None):
+def refresh(site, code, name, cache=None, url=""):
     """Zoekt een bewaard product opnieuw op (eerst op naam, dan op artikelnummer)
-    en geeft het actuele resultaat met hetzelfde artikelnummer terug, of None."""
+    en geeft het actuele resultaat met hetzelfde artikelnummer (of dezelfde productlink) terug, of None."""
     cache = {} if cache is None else cache
+    clean = lambda u: (u or "").split("?")[0].rstrip("/").lower()
     for q in (name, code):
         if not q:
             continue
@@ -619,6 +630,6 @@ def refresh(site, code, name, cache=None):
             except Exception:
                 cache[key] = []
         for it in cache[key]:
-            if it["code"] == code:
+            if it["code"] == code or (url and clean(it["url"]) == clean(url)):
                 return it
     return None

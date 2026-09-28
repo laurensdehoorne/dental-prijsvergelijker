@@ -26,6 +26,8 @@ fav_lock = threading.Lock()
 SITES = sites.SITES
 login_procs = {}
 pool = ThreadPoolExecutor(max_workers=8)
+lists_pool = ThreadPoolExecutor(max_workers=7)  # apart: lijsten vernieuwen vertraagt zoeken niet
+LOCAL_HOSTS = ("127.0.0.1", "localhost")
 
 
 def run_search(site, query):
@@ -108,7 +110,7 @@ def _fetch_lists():
                 traceback.print_exc()
                 return {"lists": [], "error": f"{type(e).__name__}: {e}"}
 
-        futures = {s: pool.submit(one, s) for s in SITES}
+        futures = {s: lists_pool.submit(one, s) for s in SITES}
         old = lists_cache["data"] or {}
         data = {}
         for s, f in futures.items():
@@ -156,7 +158,8 @@ def refresh_items(items):
 
     def work(site, idxs):
         cache = {}
-        return [(i, sites.refresh(site, items[i]["code"], items[i]["name"], cache)) for i in idxs]
+        return [(i, sites.refresh(site, items[i]["code"], items[i]["name"], cache, items[i].get("url", "")))
+                for i in idxs]
 
     out = [None] * len(items)
     for f in [pool.submit(work, s, idxs) for s, idxs in by_site.items() if s in SITES]:
@@ -183,6 +186,14 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    def foreign(self):
+        """Verzoek van een andere website? Die mag de app niet aansturen (mandjes, afmelden)
+        of uitlezen (DNS-rebinding): enkel de app zelf op 127.0.0.1/localhost."""
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+        origin = self.headers.get("Origin")
+        return host not in LOCAL_HOSTS or (
+            origin is not None and urllib.parse.urlparse(origin).hostname not in LOCAL_HOSTS)
+
     def send_json(self, data, code=200):
         body = json.dumps(data).encode()
         self.send_response(code)
@@ -192,6 +203,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.foreign():
+            return self.send_error(403)
         url = urllib.parse.urlparse(self.path)
         if url.path == "/":
             body = (paths.RES / "static" / "index.html").read_bytes()
@@ -226,6 +239,8 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(n) or b"{}")
 
     def do_PUT(self):
+        if self.foreign():
+            return self.send_error(403)
         if self.path == "/api/settings":
             data = self.read_json()
             SETTINGS.write_text(json.dumps({"shipping": data.get("shipping", {})}, indent=1))
@@ -240,6 +255,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({"ok": True})
 
     def do_POST(self):
+        if self.foreign():
+            return self.send_error(403)
         if self.path == "/api/refresh":
             return self.send_json({"items": refresh_items(self.read_json().get("items", []))})
         if self.path in ("/api/cart/add", "/api/cart/remove"):
