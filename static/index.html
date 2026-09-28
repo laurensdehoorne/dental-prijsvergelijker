@@ -262,7 +262,7 @@ function renderShops() {
       </span>
       ${s.logged_in
         ? `<button data-logout="${k}">Uitloggen</button>`
-        : `<button data-login="${k}" ${s.login_open ? "disabled" : ""}>Inloggen</button>`}
+        : `<button data-login="${k}" title="${s.login_open ? "Loginvenster sluiten en opnieuw openen" : ""}">${s.login_open ? "Opnieuw openen" : "Inloggen"}</button>`}
     </label>`).join("");
 }
 

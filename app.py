@@ -127,9 +127,15 @@ class Handler(BaseHTTPRequestHandler):
         action, site = parts[1], parts[2]
         if action == "login":
             proc = login_procs.get(site)
-            if proc is None or proc.poll() is not None:
-                login_procs[site] = subprocess.Popen(
-                    [sys.executable, str(ROOT / "login.py"), site], cwd=ROOT)
+            if proc is not None and proc.poll() is None:
+                # al een loginvenster open (misschien verdwenen/achter iets): opnieuw beginnen
+                proc.terminate()
+                try:
+                    proc.wait(8)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+            login_procs[site] = subprocess.Popen(
+                [sys.executable, str(ROOT / "login.py"), site], cwd=ROOT)
             self.send_json({"ok": True})
         elif action == "logout":
             (sites.SESSIONS / f"{site}.json").unlink(missing_ok=True)

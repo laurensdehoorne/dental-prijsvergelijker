@@ -11,10 +11,13 @@ Gebruik: python login.py <site>   (dentaldiscount, basiq, dentaladdict, hofmeest
 import json
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
+import urllib.request
 from pathlib import Path
 
 from playwright.sync_api import Error, sync_playwright
@@ -79,6 +82,43 @@ def snapshot(browser, ctx):
     }
 
 
+def open_tabs(port):
+    """Aantal open tabbladen volgens Chrome zelf (betrouwbaarder dan bijhouden)."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=3) as r:
+            return sum(1 for t in json.load(r) if t.get("type") == "page")
+    except Exception:
+        return -1  # onbekend (bv. Chrome nog aan het opstarten)
+
+
+def bring_to_front(pid):
+    """Op Mac opent het venster anders soms achter de app."""
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSApplicationActivateIgnoringOtherApps, NSRunningApplication
+        app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+        if app:
+            app.activateWithOptions_(NSApplicationActivateIgnoringOtherApps)
+    except Exception:
+        pass
+
+
+def watchdog(chrome, port):
+    """Vangnet naast de hoofdlus: als het venster dicht is (of nooit opende), alles
+    afsluiten, ook als Playwright ergens blijft wachten op een gesloten pagina."""
+    started, seen = time.time(), False
+    while chrome.poll() is None:
+        time.sleep(2)
+        tabs = open_tabs(port)
+        seen = seen or tabs > 0
+        if (seen and tabs == 0) or (not seen and time.time() - started > 25):
+            time.sleep(3)  # hoofdlus de kans geven om zelf netjes te stoppen
+            if chrome.poll() is None:
+                chrome.terminate()
+            os._exit(0)
+
+
 def save(state, out):
     tmp = out.with_suffix(".tmp")
     tmp.write_text(json.dumps(state))
@@ -87,6 +127,10 @@ def save(state, out):
 
 
 def main(site):
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # zodat 'finally' Chrome ook sluit
+    if hasattr(signal, "SIGUSR1"):  # diagnose: 'kill -USR1 <pid>' schrijft de stack naar het log
+        import faulthandler
+        faulthandler.register(signal.SIGUSR1)
     SESSIONS.mkdir(exist_ok=True)
     PROFILES.mkdir(exist_ok=True)
     out = SESSIONS / f"{site}.json"
@@ -101,6 +145,7 @@ def main(site):
         "--window-size=1100,850",
         LOGIN_URLS[site],
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    threading.Thread(target=watchdog, args=(chrome, port), daemon=True).start()
 
     try:
         with sync_playwright() as p:
@@ -116,16 +161,20 @@ def main(site):
             if browser is None:
                 return
 
+            started = time.time()
             seen_page = False
             origins_seen = []
             while chrome.poll() is None and browser.is_connected():
-                ctx = browser.contexts[0] if browser.contexts else None
-                pages = ctx.pages if ctx else []
-                if pages:
+                tabs = open_tabs(port)
+                if tabs > 0 and not seen_page:
                     seen_page = True
-                elif seen_page:
-                    break  # laatste venster gesloten (Chrome blijft op Mac soms open)
-                if ctx:
+                    bring_to_front(chrome.pid)
+                if tabs == 0 and seen_page:
+                    break  # venster gesloten (Chrome blijft op Mac soms draaien)
+                if not seen_page and time.time() - started > 20:
+                    break  # Chrome opende geen venster: opgeven i.p.v. blijven hangen
+                ctx = browser.contexts[0] if browser.contexts else None
+                if ctx and seen_page:
                     try:
                         state = snapshot(browser, ctx)
                     except Error:
@@ -137,7 +186,7 @@ def main(site):
                         origins_seen[:] = known.values()
                         state["origins"] = origins_seen
                         save(state, out)
-                time.sleep(2)
+                time.sleep(1.5)
     finally:
         if chrome.poll() is None:
             chrome.terminate()
