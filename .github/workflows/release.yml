@@ -17,8 +17,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            asset: Prijsvergelijker-mac.zip
+          - os: macos-latest          # Apple Silicon (M1/M2/M3/…)
+            asset: Prijsvergelijker-mac-apple-silicon.zip
+          - os: macos-15-intel        # oudere Macs met Intel-processor
+            asset: Prijsvergelijker-mac-intel.zip
           - os: windows-latest
             asset: Prijsvergelijker-windows.zip
     runs-on: ${{ matrix.os }}
@@ -55,7 +57,11 @@ jobs:
           body: |
             ## Installeren
 
-            **Mac** — download `Prijsvergelijker-mac.zip`, pak uit en sleep **Prijsvergelijker** naar *Apps*.
+            **Mac** — kies de juiste versie (Apple-menu → **Over deze Mac** → *Chip* of *Processor*):
+            - Apple M1/M2/M3/… → `Prijsvergelijker-mac-apple-silicon.zip`
+            - Intel → `Prijsvergelijker-mac-intel.zip`
+
+            Pak uit en sleep **Prijsvergelijker** naar *Apps*.
             De app is niet door Apple ondertekend, dus de eerste keer blokkeert macOS hem:
             1. Open de app; macOS meldt dat hij niet geopend kan worden → klik **Gereed**.
             2. Ga naar **Systeeminstellingen → Privacy en beveiliging**, scroll naar beneden en klik

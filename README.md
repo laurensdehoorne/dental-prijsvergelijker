@@ -19,7 +19,9 @@ Desktop-app voor **Mac en Windows**. Een lokale webapp die één zoekopdracht te
 Op de [Releases-pagina](https://github.com/laurensdehoorne/dental-prijsvergelijker/releases)
 staan kant-en-klare versies — geen Python nodig:
 
-- **Mac**: `Prijsvergelijker-mac.zip` → uitpakken → naar *Apps* slepen.
+- **Mac**: `Prijsvergelijker-mac-apple-silicon.zip` (M1/M2/M3/…) of
+  `Prijsvergelijker-mac-intel.zip` (oudere Macs met Intel-processor; zie
+  Apple-menu → *Over deze Mac*) → uitpakken → naar *Apps* slepen.
   Eerste keer (niet door Apple ondertekend): app openen → **Gereed** →
   *Systeeminstellingen → Privacy en beveiliging* → **Toch openen**.
   Of in Terminal: `xattr -dr com.apple.quarantine /Applications/Prijsvergelijker.app`
