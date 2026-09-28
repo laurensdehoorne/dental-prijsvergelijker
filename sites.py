@@ -447,7 +447,7 @@ def henryschein_search(query):
                 p["price"], cat = prices[p["code"]]
                 p["old_price"] = cat if cat and cat > p["price"] else None
     for p in products:
-        p.pop("_uom")
+        p["uom"] = p.pop("_uom") or "ST"  # nodig om in het mandje te leggen
     return products
 
 

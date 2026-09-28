@@ -73,6 +73,21 @@
   .notice b { color: var(--text); }
   .notice button { font-size: 13px; padding: 4px 12px; }
   .notice .x { margin-left: auto; border: 0; background: none; color: var(--warn); font-size: 18px; padding: 0 4px; }
+  .cartbtn { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 2px 7px;
+             font-size: 13px; line-height: 1.2; cursor: pointer; }
+  .cartbtn:hover { border-color: var(--accent); }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg);
+           padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 50; box-shadow: 0 6px 24px rgb(0 0 0 / .25);
+           max-width: min(560px, 92vw); }
+  .toast.err { background: var(--bad); color: #fff; }
+  .shipbar { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 6px; }
+  .shipbar > span { display: block; height: 100%; background: var(--accent); }
+  .shipbar.done > span { background: var(--good); }
+  .cartsum { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; padding: 10px 12px; font-size: 13px;
+             border-top: 1px solid var(--line); }
+  .cartsum b { font-size: 15px; }
+  .settings td, .settings th { padding: 6px 8px; }
+  .settings input { width: 90px; }
   .weak { opacity: .5; }
   .weak:hover { opacity: 1; }
   .best { background: var(--good-bg); }
@@ -164,6 +179,17 @@
     <div class="tabs">
       <button data-tab="search" class="on">Zoekresultaten</button>
       <button data-tab="list">★ Mijn lijst <span id="favCount"></span></button>
+      <button data-tab="carts">🛒 Mandjes <span id="cartCount"></span></button>
+    </div>
+    <div id="cartView" hidden>
+      <div class="toolbar">
+        <span id="cartInfo">Mandjes worden geladen…</span>
+        <span style="display:flex;gap:8px">
+          <button id="shipSettings">⚙︎ Verzendvoorwaarden</button>
+          <button class="primary" id="cartReload">↻ Vernieuwen</button>
+        </span>
+      </div>
+      <div id="cartBody"></div>
     </div>
     <div id="listView" hidden>
       <div class="toolbar" id="listBar">
@@ -194,6 +220,36 @@
     </div>
   </div>
 </main>
+
+<dialog id="cartDlg">
+  <form method="dialog">
+    <h3>In winkelmandje leggen</h3>
+    <p id="cartWhat"></p>
+    <label for="cartQty">Aantal</label>
+    <input id="cartQty" type="number" min="1" max="999" value="1" required>
+    <p style="margin-top:10px">De app legt het enkel in je mandje. Bestellen doe je zelf in de webwinkel.</p>
+    <div class="row2">
+      <button value="ok" class="primary" style="order:2">🛒 In mandje</button>
+      <button value="cancel" formnovalidate style="order:1">Annuleren</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="shipDlg" style="width:min(520px,94vw)">
+  <form method="dialog">
+    <h3>Verzendvoorwaarden</h3>
+    <p>Bedragen excl. btw. Laat "gratis vanaf" leeg als je het niet weet. Heb je met een winkel iets anders
+       afgesproken (bv. altijd gratis), vul dat hier in.</p>
+    <table class="settings"><thead><tr><th style="text-align:left">Winkel</th><th>Gratis vanaf €</th><th>Anders €</th></tr></thead>
+      <tbody id="shipRows"></tbody></table>
+    <div class="row2">
+      <button value="ok" class="primary" style="order:2">Bewaren</button>
+      <button value="cancel" formnovalidate style="order:1">Annuleren</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" hidden></div>
 
 <dialog id="favDlg">
   <form method="dialog" id="favForm">
@@ -371,6 +427,7 @@ const starBtn = (it, i) => {
   return `<button class="star ${on ? "on" : ""}" data-star="${i}" title="${on ? "Van mijn lijst halen" : "Op mijn lijst zetten"}">${on ? "★" : "☆"}</button>`;
 };
 document.getElementById("out").addEventListener("click", e => {
+  if (e.target.dataset.cart != null) return openCartDialog(shown[e.target.dataset.cart]);
   const i = e.target.dataset.star;
   if (i == null) return;
   const it = shown[i];
@@ -411,8 +468,10 @@ function setTab(t) {
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
   document.getElementById("searchView").hidden = t !== "search";
   document.getElementById("listView").hidden = t !== "list";
+  document.getElementById("cartView").hidden = t !== "carts";
   document.body.classList.toggle("wide", t === "search" && view === "cols" && !!results);
   if (t === "list") renderList();
+  if (t === "carts") loadCarts();
 }
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
@@ -460,6 +519,7 @@ function renderList() {
             ? (it.price > it.prev_price ? `<span class="up">▲ was ${eur(it.prev_price)}</span>` : `<span class="down">▼ was ${eur(it.prev_price)}</span>`) : "";
           return `<tr class="${best != null && !it.missing && key(it) === best ? "best" : ""}">
             <td style="width:30px"><button class="star on" data-unfav="${esc(favKey(it))}" title="Van mijn lijst halen">★</button></td>
+            <td style="width:34px">${cartBtn("fav", favKey(it))}</td>
             <td class="hide-sm" style="width:56px">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}</td>
             <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
               <div class="code">${it.brand ? esc(it.brand) + " · " : ""}${esc(it.pack)}${it.pack && it.code ? " · " : ""}${it.code ? "art. " + esc(it.code) : ""}
@@ -475,6 +535,11 @@ function renderList() {
 document.getElementById("listQ").addEventListener("input", e => { listQuery = e.target.value; renderList(); });
 document.getElementById("listView").addEventListener("click", async e => {
   const d = e.target.dataset;
+  if (d.cartfav) {
+    const it = favs.groups.flatMap(g => g.items).find(x => favKey(x) === d.cartfav);
+    if (it) openCartDialog(it);
+    return;
+  }
   if (d.unfav) { removeFav(d.unfav); renderList(); }
   if (d.delgroup != null && confirm(`Groep "${favs.groups[d.delgroup].name}" verwijderen?`)) {
     favs.groups.splice(d.delgroup, 1); saveFavs(); renderList();
@@ -606,7 +671,8 @@ function render() {
               </div>
               <div class="n"><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
                 <div class="line2"><span class="code">${it.brand ? esc(it.brand) + (it.pack ? " · " : "") : ""}${esc(it.pack)}</span>
-                  <span class="p">${priceCell(it)}${it.pp != null ? `<small class="pp">${eurPP(it.pp)}/st</small>` : ""}</span></div>
+                  <span class="p">${priceCell(it)}${it.pp != null ? `<small class="pp">${eurPP(it.pp)}/st</small>` : ""}
+                    <span style="display:block;margin-top:3px">${cartBtn("shown", i)}</span></span></div>
               </div>
             </div>`; }).join("") : `<div class="msg">Geen resultaten</div>`) + `</div>`;
       }).join("") + `</div>`;
@@ -627,7 +693,7 @@ function render() {
   document.getElementById("out").innerHTML = errors + (items.length ? `
     <table>
       <thead><tr>
-        <th></th>
+        <th></th><th></th>
         <th class="hide-sm"></th>
         <th data-sort="name">Product${arrow("name")}</th>
         <th data-sort="site">Winkel${arrow("site")}</th>
@@ -638,6 +704,7 @@ function render() {
       <tbody>${items.map((it, i) => `
         <tr class="${isBest(it) ? "best" : weak(it)}">
           <td style="width:30px">${starBtn(it, i)}</td>
+          <td style="width:34px">${cartBtn("shown", i)}</td>
           <td class="hide-sm">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}</td>
           <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
               <div class="code">${it.brand ? esc(it.brand) + " · " : ""}${esc(it.pack)}${it.pack && it.code ? " · " : ""}${it.code ? "art. " + esc(it.code) : ""}</div></td>
@@ -654,6 +721,149 @@ function render() {
     order = k === "pp" || k === "price" ? "price" : order; render();
   }));
 }
+
+// ---------- winkelmandjes ----------
+// cartBtn("shown", i) = product i van de zoekresultaten; cartBtn("fav", key) = product uit Mijn lijst
+const cartBtn = (src, ref) => `<button class="cartbtn" ${src === "fav" ? `data-cartfav="${esc(ref)}"` : `data-cart="${ref}"`}
+  title="In winkelmandje leggen">🛒</button>`;
+
+let toastTimer;
+function toast(msg, err = false) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = "toast" + (err ? " err" : ""); t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, err ? 6000 : 3500);
+}
+
+let pendingCart = null;
+function openCartDialog(it) {
+  if (!it) return;
+  if (it.price == null && !shops[it.site]?.logged_in) return toast(`Log eerst in bij ${shops[it.site]?.label || it.site}.`, true);
+  pendingCart = it;
+  document.getElementById("cartWhat").textContent = `${shops[it.site]?.label || it.site}: ${it.name}` +
+    (it.price != null ? ` — ${eur(it.price)}` : "");
+  const q = document.getElementById("cartQty"); q.value = 1;
+  document.getElementById("cartDlg").showModal(); q.select();
+}
+document.getElementById("cartDlg").addEventListener("close", async () => {
+  const dlg = document.getElementById("cartDlg");
+  const it = pendingCart; pendingCart = null;
+  if (dlg.returnValue !== "ok" || !it) return;
+  const qty = parseInt(document.getElementById("cartQty").value) || 1;
+  const label = shops[it.site]?.label || it.site;
+  toast(`Bezig: ${qty}× in mandje bij ${label}…`);
+  try {
+    const { pp, score, ...item } = it;
+    const r = await (await fetch("/api/cart/add", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site: it.site, item, qty }) })).json();
+    if (r.error) return toast(r.error, true);
+    const n = r.cart.items.reduce((a, x) => a + x.qty, 0);
+    toast(`✓ ${qty}× ${it.name.slice(0, 50)} in je mandje bij ${label} (nu ${n} stuks, € ${(r.cart.subtotal || 0).toFixed(2).replace(".", ",")})`);
+    if (cartData) cartData.carts[it.site] = { ...r.cart, error: null };
+    renderCartCount();
+    if (tab === "carts") renderCarts();
+  } catch (err) { toast("Mislukt: " + err, true); }
+});
+
+let cartData = null;
+async function loadCarts() {
+  document.getElementById("cartInfo").innerHTML = `<span class="spinner"></span>Mandjes ophalen bij alle winkels…`;
+  try { cartData = await (await fetch("/api/carts")).json(); }
+  catch (err) { document.getElementById("cartInfo").textContent = "Ophalen mislukt: " + err; return; }
+  renderCarts(); renderCartCount();
+}
+function renderCartCount() {
+  const n = cartData ? Object.values(cartData.carts).reduce((a, c) => a + (c.items || []).length, 0) : 0;
+  document.getElementById("cartCount").textContent = n ? `(${n})` : "";
+}
+function shippingFor(site, c) {
+  // voorrang aan wat de winkel zelf zegt (Dental Addict), anders de ingestelde voorwaarden
+  const rule = cartData.shipping[site] || {};
+  const sub = c.subtotal || 0;
+  let left = c.free_shipping_left;
+  if (left == null && rule.free_from != null) left = Math.max(0, rule.free_from - sub);
+  const cost = left == null ? null : left > 0 ? (rule.cost ?? null) : 0;
+  return { left, cost, freeFrom: rule.free_from, pct: left == null ? 0 : left <= 0 ? 100 : Math.min(100, sub / (sub + left) * 100) };
+}
+function renderCarts() {
+  if (!cartData) return;
+  const el = document.getElementById("cartBody");
+  let totalGoods = 0, totalShip = 0, unknownShip = false, nShops = 0;
+  const empty = [], notIn = [];
+  const cards = Object.entries(cartData.carts).map(([site, c]) => {
+    const label = shops[site]?.label || site;
+    const head = `<h2><span class="dot" style="background:${COLORS[site]}"></span>${esc(label)}
+        <span class="acts"><a class="btnlink" href="${esc(c.url)}" target="_blank" style="padding:4px 10px">Open mandje in webwinkel ↗</a></span></h2>`;
+    if (c.not_logged_in) { notIn.push(label); return ""; }
+    if (c.error) return `<div class="group">${head}<div class="err">${esc(c.error)}</div></div>`;
+    if (!c.items.length) { empty.push(`<a href="${esc(c.url)}" target="_blank">${esc(label)}</a>`); return ""; }
+    nShops++;
+    const sh = shippingFor(site, c);
+    totalGoods += c.subtotal || 0;
+    if (sh.cost == null) unknownShip = true; else totalShip += sh.cost;
+    const shipTxt = sh.left == null ? "Verzendkosten onbekend (stel in via ⚙︎)"
+      : sh.left <= 0 ? "✓ Gratis verzending"
+      : `Nog <b>${eur(sh.left)}</b> tot gratis verzending — anders ${sh.cost != null ? eur(sh.cost) : "?"} verzendkosten`;
+    return `<div class="group">${head}
+      <table><tbody>${c.items.map(it => `<tr>
+        <td>${esc(it.name)}<div class="code">art. ${esc(it.code)}</div></td>
+        <td class="num">${it.qty} ×</td>
+        <td class="num">${it.unit != null ? eur(it.unit) : ""}</td>
+        <td class="num"><b>${it.total != null ? eur(it.total) : ""}</b></td>
+        <td class="num" style="width:150px">
+          <button class="cartbtn" data-find="${esc(it.name)}" title="Zoek dit product bij alle winkels">🔍 elders</button>
+          <button class="cartbtn" data-rm="${esc(site)}|${esc(it.line)}" data-name="${esc(it.name)}" title="Uit mandje halen">✕</button></td>
+      </tr>`).join("")}</tbody></table>
+      <div class="cartsum">
+        <span>Subtotaal <b>${eur(c.subtotal || 0)}</b></span>
+        <span style="flex:1;min-width:220px">${shipTxt}
+          ${sh.left != null ? `<div class="shipbar ${sh.left <= 0 ? "done" : ""}"><span style="width:${sh.pct}%"></span></div>` : ""}</span>
+      </div></div>`;
+  });
+  document.getElementById("cartInfo").innerHTML = nShops
+    ? `${nShops} ${nShops === 1 ? "mandje" : "mandjes"} · producten <b>${eur(totalGoods)}</b> + verzending <b>${eur(totalShip)}</b>${unknownShip ? " (+ onbekend)" : ""}
+       = <b>${eur(totalGoods + totalShip)}</b> excl. btw · afrekenen doe je in elke webwinkel zelf`
+    : "Al je mandjes zijn leeg. Leg producten in een mandje met de 🛒-knop bij de zoekresultaten of in Mijn lijst.";
+  el.innerHTML = cards.join("") +
+    (empty.length ? `<p class="code" style="margin:4px 2px">Leeg: ${empty.join(" · ")}</p>` : "") +
+    (notIn.length ? `<p class="code" style="margin:4px 2px">Niet ingelogd: ${notIn.map(esc).join(" · ")}</p>` : "");
+}
+document.getElementById("cartBody").addEventListener("click", async e => {
+  const d = e.target.dataset;
+  if (d.find) return runSearch(d.find);
+  if (d.rm) {
+    const [site, ...rest] = d.rm.split("|");
+    if (!confirm(`"${d.name}" uit je mandje bij ${shops[site]?.label || site} halen?`)) return;
+    const r = await (await fetch("/api/cart/remove", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site, line: rest.join("|") }) })).json();
+    if (r.error) return toast(r.error, true);
+    cartData.carts[site] = { ...r.cart, error: null };
+    toast("Verwijderd uit je mandje."); renderCarts(); renderCartCount();
+  }
+});
+document.getElementById("cartReload").addEventListener("click", loadCarts);
+
+// verzendvoorwaarden instellen
+document.getElementById("shipSettings").addEventListener("click", async () => {
+  const st = await (await fetch("/api/settings")).json();
+  const v = x => x == null ? "" : String(x).replace(".", ",");
+  document.getElementById("shipRows").innerHTML = Object.entries(st.shipping).map(([k, r]) => `<tr>
+    <td>${esc(shops[k]?.label || k)}</td>
+    <td><input data-k="${k}" data-f="free_from" inputmode="decimal" value="${v(r.free_from)}" placeholder="onbekend"></td>
+    <td><input data-k="${k}" data-f="cost" inputmode="decimal" value="${v(r.cost)}" placeholder="onbekend"></td></tr>`).join("");
+  document.getElementById("shipDlg").showModal();
+});
+document.getElementById("shipDlg").addEventListener("close", async () => {
+  if (document.getElementById("shipDlg").returnValue !== "ok") return;
+  const shipping = {};
+  document.querySelectorAll("#shipRows input").forEach(inp => {
+    const val = inp.value.trim().replace(",", ".");
+    (shipping[inp.dataset.k] ||= {})[inp.dataset.f] = val === "" ? null : parseFloat(val);
+  });
+  const st = await (await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ shipping }) })).json();
+  if (cartData) { cartData.shipping = st.shipping; renderCarts(); }
+  toast("Verzendvoorwaarden bewaard.");
+});
 
 loadStatus();
 loadFavs();

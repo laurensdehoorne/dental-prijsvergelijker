@@ -82,3 +82,19 @@ van de app.
 - **Prijzen vernieuwen** zoekt alle bewaarde producten opnieuw op en toont
   prijswijzigingen (▲/▼ met de oude prijs).
 - Alles staat in `favorites.json` in deze map.
+
+## Winkelmandjes
+
+- **🛒 bij een product** (zoekresultaten en Mijn lijst) legt het rechtstreeks
+  in je mandje bij die winkel, met het aantal dat je kiest.
+- Tabblad **🛒 Mandjes** toont de mandjes van alle winkels waar je ingelogd
+  bent: inhoud, subtotaal, en hoeveel je nog tekortkomt voor gratis verzending.
+  Met **🔍 elders** zoek je een product uit je mandje bij alle winkels; met ✕
+  haal je het uit het mandje.
+- **Bestellen en afrekenen doe je altijd zelf in de webwinkel** (knop
+  "Open mandje in webwinkel"). De app bestelt nooit.
+- **⚙︎ Verzendvoorwaarden**: gratis-vanaf-bedrag en verzendkosten per winkel
+  (excl. btw), aan te passen als je andere afspraken hebt. Dental Addict geeft
+  zelf door hoeveel je nog tekortkomt; dat heeft voorrang.
+
+Bekend: Henry Schein meldt je na 1 uur automatisch af.

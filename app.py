@@ -13,11 +13,13 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import carts
 import sites
 
 ROOT = Path(__file__).parent
 PORT = 8765
 FAVORITES = ROOT / "favorites.json"
+SETTINGS = ROOT / "settings.json"
 fav_lock = threading.Lock()
 SITES = sites.SITES
 login_procs = {}
@@ -41,6 +43,32 @@ def load_favorites():
         return json.loads(FAVORITES.read_text())
     except (OSError, ValueError):
         return {"searches": [], "groups": []}
+
+
+def load_settings():
+    try:
+        data = json.loads(SETTINGS.read_text())
+    except (OSError, ValueError):
+        data = {}
+    shipping = {k: dict(v) for k, v in carts.DEFAULT_SHIPPING.items()}
+    for k, v in (data.get("shipping") or {}).items():
+        if k in shipping:
+            shipping[k].update(v)
+    return {"shipping": shipping}
+
+
+def read_carts():
+    """Alle mandjes parallel uitlezen (enkel winkels waar je ingelogd bent)."""
+    def one(site):
+        if not SITES[site]["logged_in"]():
+            return {"items": [], "error": None, "not_logged_in": True, "url": carts.CARTS[site].url}
+        try:
+            return {**carts.CARTS[site].read(), "error": None}
+        except Exception as e:
+            traceback.print_exc()
+            return {"items": [], "error": str(e), "url": carts.CARTS[site].url}
+    futures = {s: pool.submit(one, s) for s in carts.CARTS}
+    return {"carts": {s: f.result() for s, f in futures.items()}, **load_settings()}
 
 
 def refresh_items(items):
@@ -103,6 +131,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({s: f.result() for s, f in futures.items()})
         elif url.path == "/api/status":
             self.send_json(status())
+        elif url.path == "/api/carts":
+            self.send_json(read_carts())
+        elif url.path == "/api/settings":
+            self.send_json(load_settings())
         elif url.path == "/api/synonyms":
             self.send_json(sites.SYNONYMS)
         elif url.path == "/api/favorites":
@@ -115,6 +147,10 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(n) or b"{}")
 
     def do_PUT(self):
+        if self.path == "/api/settings":
+            data = self.read_json()
+            SETTINGS.write_text(json.dumps({"shipping": data.get("shipping", {})}, indent=1))
+            return self.send_json(load_settings())
         if self.path != "/api/favorites":
             return self.send_error(404)
         data = self.read_json()
@@ -127,6 +163,26 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/api/refresh":
             return self.send_json({"items": refresh_items(self.read_json().get("items", []))})
+        if self.path in ("/api/cart/add", "/api/cart/remove"):
+            # Enkel in het mandje leggen of eruit halen; bestellen gebeurt altijd in de webwinkel zelf.
+            d = self.read_json()
+            cart = carts.CARTS.get(d.get("site"))
+            if not cart:
+                return self.send_json({"error": "Onbekende winkel"}, 400)
+            try:
+                if self.path.endswith("add"):
+                    qty = int(d.get("qty") or 1)
+                    if not 1 <= qty <= 999:
+                        return self.send_json({"error": "Ongeldig aantal"}, 400)
+                    cart.add(d["item"], qty)
+                else:
+                    cart.remove(d["line"])
+                return self.send_json({"ok": True, "cart": cart.read()})
+            except carts.CartError as e:
+                return self.send_json({"error": str(e)}, 400)
+            except Exception as e:
+                traceback.print_exc()
+                return self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
         parts = self.path.strip("/").split("/")  # api/login/<site>
         if len(parts) != 3 or parts[0] != "api" or parts[2] not in SITES:
             return self.send_error(404)
