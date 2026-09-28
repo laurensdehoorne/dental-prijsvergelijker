@@ -96,10 +96,12 @@ def strip_tags(s):
 
 
 def item(site, *, code="", name="", pack="", price=None, volume_price=None, old_price=None,
-         url="", image=""):
+         url="", image="", brand=""):
     price = price or None  # 0,00 = geen echte prijs (bv. niet leverbaar)
     return {
         "site": site, "code": code, "name": name, "pack": pack, "price": price,
+        # merk enkel apart bewaren als het niet al in de naam staat (telt mee in de matchscore)
+        "brand": brand if brand and brand.lower() not in name.lower() else "",
         # laagste staffelprijs (bij grote aantallen), enkel als lager dan de gewone prijs
         "volume_price": volume_price if volume_price and price and volume_price < price else None,
         "old_price": old_price if old_price and price and old_price > price else None,
@@ -318,6 +320,7 @@ def denta_search(query):
         href = re.search(r'<a href="([^"]+)"', b)
         codes = re.findall(r'<p class="short-itemNo">([^<]*)</p>', b)
         pack = re.search(r'<p class="contentValue">([^<]*)</p>', b)
+        brand = re.search(r'<span class="size">([\s\S]*?)</span>', b)
         img = re.search(r'<img[^>]+src="([^"]+)"', b)
         # ingelogd: <span class="price-regular"><span class="gtm-price">8,95</span></span>
         #           <span class="price-old">9,94</span>  (zonder €-teken)
@@ -329,7 +332,7 @@ def denta_search(query):
         items.append(item(
             "denta", code=strip_tags(codes[0]) if codes else "",
             name=strip_tags(name.group(1)), pack=strip_tags(pack.group(1)) if pack else "",
-            price=price, old_price=old,
+            price=price, old_price=old, brand=strip_tags(brand.group(1)) if brand else "",
             url=DENTA_BASE + href.group(1) if href else DENTA_BASE,
             image=urllib.parse.urljoin(DENTA_BASE, img.group(1)) if img else "",
         ))
@@ -403,6 +406,7 @@ def henryschein_search(query):
         seen.add(code.group(1))
         imgs = re.findall(r'data-img-url="([^"]+)"', chunks[i - 1])
         uom = re.search(r'hiddenUom" value="([^"]*)"', b)
+        mfr = re.search(r'<small class="x-small"><strong>[^<]*</strong>\s*\|\s*([^<]*?)\s+-\s', b)
         pb = re.search(r'class="product-price"[^>]*>([\s\S]*?)</div>', b)
         prices = [p for p in (parse_euro(x) for x in
                   re.findall(r'(?:€|&euro;|&#8364;)\s*([\d.,]+)', pb.group(1) if pb else "")) if p]
@@ -410,6 +414,7 @@ def henryschein_search(query):
             **item("henryschein", code=code.group(1), name=strip_tags(link.group(2)),
                    price=min(prices) if prices else None,
                    url=html.unescape(link.group(1)),
+                   brand=strip_tags(mfr.group(1)) if mfr else "",
                    image=HS_BASE + imgs[-1] if imgs and imgs[-1].startswith("/") else ""),
             "_uom": uom.group(1) if uom else "",
         })

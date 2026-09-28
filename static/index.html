@@ -495,13 +495,16 @@ document.querySelectorAll(".seg button[data-order]").forEach(b => b.addEventList
 function norm(t) {
   return String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/(\d),(\d)/g, "$1.$2")                       // 2,7 -> 2.7
-    .replace(/\b([abcd])[\s-]*(\d(?:\.5)?)\s*(d)?\b/g,     // kleur: "A 2 D", "a-3d" -> a2d
+    .replace(/(\d)\/(\d)/g, "$1:$2")                        // breuk 5/8 blijft één woord
+    .replace(/(\d)\s*x\s*(?=\d)/g, "$1 x ")                  // 0.5x16 -> 0.5 x 16
+    .replace(/(\d)(ml|cc|mm|cm|mg|gr|g|l|st|stuks|pcs)(?![a-z])/g, "$1 $2")  // 5ml -> 5 ml
+    .replace(/\b([abcd])[\s-]*(\d(?:\.5)?)(?:\s*(d))?\b/g, // kleur: "A 2 D", "a-3d" -> a2d
              (m, a, b, c) => a + b + (c || ""));
 }
-const tokens = t => norm(t).split(/[^a-z0-9.]+/).map(x => x.replace(/^\.+|\.+$/g, "")).filter(Boolean);
+const tokens = t => norm(t).split(/[^a-z0-9.:]+/).map(x => x.replace(/^[.:]+|[.:]+$/g, "")).filter(Boolean);
 function matchScore(qTok, it) {
   if (!qTok.length) return 1;
-  const words = tokens(it.name + " " + it.pack + " " + it.code);
+  const words = tokens(it.name + " " + it.pack + " " + it.code + " " + (it.brand || ""));
   const set = new Set(words);
   let sum = 0;
   for (const q of qTok) {
@@ -518,7 +521,7 @@ function allItems() {
   for (const [site, r] of Object.entries(results || {})) {
     if (!isOn(site)) continue;
     for (const it of r.items) {
-      const hay = (it.name + " " + it.pack + " " + it.code).toLowerCase();
+      const hay = (it.name + " " + it.pack + " " + it.code + " " + (it.brand || "")).toLowerCase();
       if (onlyPriced && it.price == null) continue;
       if (words.every(w => hay.includes(w))) out.push({ ...it, pp: it.price != null && it.pieces ? it.price / it.pieces : null,
                                                           score: matchScore(qTok, it) });
@@ -572,7 +575,7 @@ function render() {
                 ${starBtn(it, i)}
               </div>
               <div class="n"><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
-                <div class="line2"><span class="code">${esc(it.pack)}</span>
+                <div class="line2"><span class="code">${it.brand ? esc(it.brand) + (it.pack ? " · " : "") : ""}${esc(it.pack)}</span>
                   <span class="p">${priceCell(it)}${it.pp != null ? `<small class="pp">${eurPP(it.pp)}/st</small>` : ""}</span></div>
               </div>
             </div>`; }).join("") : `<div class="msg">Geen resultaten</div>`) + `</div>`;
@@ -607,7 +610,7 @@ function render() {
           <td style="width:30px">${starBtn(it, i)}</td>
           <td class="hide-sm">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}</td>
           <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
-              <div class="code">${esc(it.pack)}${it.pack && it.code ? " · " : ""}${it.code ? "art. " + esc(it.code) : ""}</div></td>
+              <div class="code">${it.brand ? esc(it.brand) + " · " : ""}${esc(it.pack)}${it.pack && it.code ? " · " : ""}${it.code ? "art. " + esc(it.code) : ""}</div></td>
           <td><span class="tag"><span class="dot" style="background:${COLORS[it.site]}"></span>${esc(shops[it.site]?.label || it.site)}</span></td>
           <td class="num">${priceCell(it)}</td>
           <td class="num hide-sm">${it.pieces ?? ""}</td>
