@@ -42,6 +42,6 @@ jobs:
           Get-Content "$env:APPDATA\Prijsvergelijker\log.txt" -ErrorAction SilentlyContinue
           "--- sessiebestand"
           Get-ChildItem "$env:APPDATA\Prijsvergelijker\sessions" -ErrorAction SilentlyContinue
-          $j = Get-Content "$env:APPDATA\Prijsvergelijker\sessions\dentaldiscount.json" -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json
+          $j = Get-Content "$env:APPDATA\Prijsvergelijker\sessions\basiq.json" -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json
           "cookies in sessiebestand: $($j.cookies.Count) -> $(($j.cookies | ForEach-Object name) -join ', ')"
           Get-Process Prijsvergelijker, chrome -ErrorAction SilentlyContinue | Stop-Process -Force

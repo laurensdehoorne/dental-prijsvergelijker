@@ -196,6 +196,11 @@ class Handler(BaseHTTPRequestHandler):
                     proc.wait(8)
                 except subprocess.TimeoutExpired:
                     proc.kill()
+            if sys.platform == "win32":
+                # Windows laat een venster van een ander programma normaal niet naar voren komen;
+                # de app (die net aangeklikt werd) mag die toestemming wel geven.
+                import ctypes
+                ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY
             login_procs[site] = subprocess.Popen(paths.login_command(site), cwd=paths.DATA)
             self.send_json({"ok": True})
         elif action == "logout":

@@ -180,6 +180,11 @@ def main(site):
                 if tabs > 0 and not seen_page:
                     seen_page = True
                     bring_to_front(chrome.pid)
+                    if sys.platform == "win32" and browser.contexts and browser.contexts[0].pages:
+                        try:  # Windows: tabblad (en daarmee het venster) naar voren
+                            browser.contexts[0].pages[0].bring_to_front()
+                        except Error:
+                            pass
                 if tabs == 0 and seen_page:
                     break  # venster gesloten (Chrome blijft op Mac soms draaien)
                 if not seen_page and time.time() - started > 20:
