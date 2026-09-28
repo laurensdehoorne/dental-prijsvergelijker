@@ -1,26 +1,24 @@
 """Start de prijsvergelijker als desktop-app (Mac en Windows): server in de
 achtergrond en de interface in een eigen venster (WebKit op Mac, Edge WebView2
 op Windows). Venster sluiten = app stoppen."""
-import os
 import sys
 import threading
-from pathlib import Path
 
 import webview
 
 import app
 
-ROOT = Path(__file__).parent
-ICON = ROOT / "assets" / "icon.png"
+import paths
+
+ICON = paths.RES / "assets" / "icon.png"
 
 
 def log_to_file():
-    """Zonder console (Windows pythonw) gaat print() nergens heen: naar een logbestand."""
-    if sys.stdout is not None and sys.stderr is not None:
+    """Zonder console gaat print() nergens heen: naar een logbestand in de gegevensmap."""
+    # ingepakte app (via Finder/Startmenu gestart) of Windows pythonw: geen console
+    if not paths.FROZEN and sys.stdout is not None and sys.stderr is not None:
         return
-    base = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Prijsvergelijker"
-    base.mkdir(parents=True, exist_ok=True)
-    f = open(base / "log.txt", "a", buffering=1, encoding="utf-8")
+    f = open(paths.DATA / "log.txt", "a", buffering=1, encoding="utf-8")
     sys.stdout = sys.stderr = f
 
 
@@ -42,6 +40,11 @@ def mac_branding():
 
 def main():
     log_to_file()
+    if len(sys.argv) > 2 and sys.argv[1] == "--login":
+        # ingepakte app: het loginvenster draait als tweede proces van dezelfde app
+        import login
+        login.main(sys.argv[2])
+        return
     try:
         server = app.make_server()
     except OSError:
@@ -53,7 +56,7 @@ def main():
     webview.create_window("Dentale Prijsvergelijker", f"http://localhost:{app.PORT}",
                           width=1440, height=900, min_size=(800, 600))
     # private_mode=False: localStorage (weergave, filters) blijft bewaard
-    webview.start(private_mode=False, storage_path=str(ROOT / "profiles" / "webview"))
+    webview.start(private_mode=False, storage_path=str(paths.PROFILES / "webview"))
     if server:
         server.shutdown()
     sys.exit(0)

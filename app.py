@@ -11,15 +11,15 @@ import urllib.parse
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 import carts
 import sites
 
-ROOT = Path(__file__).parent
+import paths
+
 PORT = 8765
-FAVORITES = ROOT / "favorites.json"
-SETTINGS = ROOT / "settings.json"
+FAVORITES = paths.FAVORITES
+SETTINGS = paths.SETTINGS
 fav_lock = threading.Lock()
 SITES = sites.SITES
 login_procs = {}
@@ -117,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urllib.parse.urlparse(self.path)
         if url.path == "/":
-            body = (ROOT / "static" / "index.html").read_bytes()
+            body = (paths.RES / "static" / "index.html").read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -196,8 +196,7 @@ class Handler(BaseHTTPRequestHandler):
                     proc.wait(8)
                 except subprocess.TimeoutExpired:
                     proc.kill()
-            login_procs[site] = subprocess.Popen(
-                [sys.executable, str(ROOT / "login.py"), site], cwd=ROOT)
+            login_procs[site] = subprocess.Popen(paths.login_command(site), cwd=paths.DATA)
             self.send_json({"ok": True})
         elif action == "logout":
             (sites.SESSIONS / f"{site}.json").unlink(missing_ok=True)

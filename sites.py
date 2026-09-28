@@ -10,9 +10,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.cookiejar import CookieJar
-from pathlib import Path
 
-SESSIONS = Path(__file__).parent / "sessions"
+from paths import SESSIONS
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/140.0 Safari/537.36")
 

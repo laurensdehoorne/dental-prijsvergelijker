@@ -14,6 +14,32 @@ Desktop-app voor **Mac en Windows**. Een lokale webapp die één zoekopdracht te
 
 ## Installeren en starten
 
+### Download (aanbevolen)
+
+Op de [Releases-pagina](https://github.com/laurensdehoorne/dental-prijsvergelijker/releases)
+staan kant-en-klare versies — geen Python nodig:
+
+- **Mac**: `Prijsvergelijker-mac.zip` → uitpakken → naar *Apps* slepen.
+  Eerste keer: rechtsklik → **Open** → **Open** (niet door Apple ondertekend).
+- **Windows**: `Prijsvergelijker-windows.zip` → uitpakken → `Prijsvergelijker.exe`.
+  Bij "Windows heeft uw pc beschermd": **Meer info** → **Toch uitvoeren**.
+
+Je gegevens (logins, favorieten, instellingen) staan los van de app en blijven
+bewaard bij een update:
+- Mac: `~/Library/Application Support/Prijsvergelijker`
+- Windows: `%APPDATA%\Prijsvergelijker`
+
+### Nieuwe release maken
+
+```bash
+git tag v1.0.1 && git push origin v1.0.1
+```
+
+GitHub bouwt dan automatisch de Mac- en Windows-versie en zet ze bij de release
+(zie `.github/workflows/release.yml`). Pas ook `VERSION` in `paths.py` aan.
+
+### Vanaf de broncode
+
 ### Mac
 
 ```bash

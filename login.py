@@ -6,7 +6,7 @@ en bewaart elke seconde de sessie (cookies + localStorage) in
 sessions/<site>.json. Venster sluiten = klaar. Het wachtwoord zelf wordt
 nooit gelezen of bewaard.
 
-Gebruik: python login.py <site>   (dentaldiscount, basiq, dentaladdict, hofmeester, denta, henryschein)
+Gebruik: python login.py <site>   (zie SITES in sites.py)
 """
 import json
 import os
@@ -18,15 +18,12 @@ import sys
 import threading
 import time
 import urllib.request
-from pathlib import Path
 
 from playwright.sync_api import Error, sync_playwright
 
 from sites import SITES
 
-ROOT = Path(__file__).parent
-SESSIONS = ROOT / "sessions"
-PROFILES = ROOT / "profiles"
+from paths import PROFILES, SESSIONS
 
 
 def find_browser():
