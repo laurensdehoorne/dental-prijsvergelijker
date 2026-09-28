@@ -23,7 +23,9 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
   CERTIFICATE_VERIFY_FAILED).
 - `static/index.html` — hele UI (vanilla JS).
 - Release: `prijsvergelijker.spec` (PyInstaller) + `.github/workflows/release.yml`
-  (tag `vX.Y.Z` pushen). Versie staat in `paths.py`.
+  (tag `vX.Y.Z` pushen). Versie staat in `paths.py`. Mac wordt apart gebouwd voor
+  Apple Silicon (`macos-latest`) en Intel (`macos-15-intel`); geen universal2 omdat de
+  Playwright-driver (node) en wheels per architectuur zijn.
 
 ## Opgelost in v1.0.3: loginvensters werkten niet op Windows
 **Symptoom:** in de Windows-app opende het loginvenster (Edge; geen Chrome op die pc), maar
