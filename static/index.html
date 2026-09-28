@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dentale Prijsvergelijker</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1b1f24; --muted: #6b7380; --line: #e3e6ea;
+    --accent: #0f6fde; --good: #16794a; --good-bg: #e5f5ec; --warn: #9a5b00; --warn-bg: #fff3dc;
+    --bad: #b42318;
+    --c-dentaldiscount: #e2560f; --c-basiq: #0f6fde; --c-dentaladdict: #7a3fd1; --c-hofmeester: #0e8a7d;
+    --c-denta: #c2185b; --c-henryschein: #1f3f8f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121417; --card: #1b1e23; --text: #e8eaed; --muted: #9aa1ab; --line: #2c3138;
+      --accent: #5aa2ff; --good: #5fd08f; --good-bg: #173424; --warn: #f0b458; --warn-bg: #3a2a10;
+      --bad: #ff7b72;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--card); border-bottom: 1px solid var(--line); }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 14px 20px; }
+  h1 { font-size: 17px; margin: 0 16px 0 0; white-space: nowrap; }
+  .top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  #f { flex: 1; display: flex; gap: 8px; min-width: 260px; }
+  input[type=search] { flex: 1; font: inherit; padding: 9px 12px; border: 1px solid var(--line);
+         border-radius: 8px; background: var(--bg); color: var(--text); }
+  input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
+           border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .55; cursor: default; }
+  .shops { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .shop { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px;
+          padding: 4px 6px 4px 10px; font-size: 13px; }
+  .shop input { margin: 0; accent-color: var(--accent); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .state { color: var(--muted); }
+  .state.ok { color: var(--good); }
+  .shop button { padding: 2px 10px; font-size: 12px; border-radius: 999px; }
+  main .wrap { padding-top: 16px; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+             margin-bottom: 10px; color: var(--muted); font-size: 13px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 5px 12px; font-size: 13px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .filter { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px;
+            background: var(--card); color: var(--text); width: 220px; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line);
+          border-radius: 10px; overflow: hidden; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600;
+       background: var(--bg); cursor: pointer; user-select: none; white-space: nowrap; }
+  th.num, td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 0; }
+  td img { width: 44px; height: 44px; object-fit: contain; background: #fff; border-radius: 6px; display: block; }
+  td a { color: var(--text); text-decoration: none; }
+  td a:hover { color: var(--accent); text-decoration: underline; }
+  .code { color: var(--muted); font-size: 12px; }
+  .tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+  .old { color: var(--muted); text-decoration: line-through; font-size: 12px; margin-right: 4px; }
+  .range { color: var(--warn); font-size: 12px; display: block; }
+  .row .hint { display: none; }
+  .row .old { display: block; margin: 0; }
+  .notice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--warn-bg);
+            color: var(--warn); border: 1px solid currentColor; border-radius: 10px; padding: 10px 12px;
+            margin-bottom: 12px; font-size: 14px; }
+  .notice b { color: var(--text); }
+  .notice button { font-size: 13px; padding: 4px 12px; }
+  .notice .x { margin-left: auto; border: 0; background: none; color: var(--warn); font-size: 18px; padding: 0 4px; }
+  .weak { opacity: .5; }
+  .weak:hover { opacity: 1; }
+  .best { background: var(--good-bg); }
+  .best .pp { color: var(--good); font-weight: 700; }
+  .none { color: var(--muted); font-style: italic; }
+  /* alle winkels op één rij; te smal scherm = horizontaal scrollen */
+  .cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: 10px;
+          overflow-x: auto; padding-bottom: 6px; align-items: start; }
+  body.wide .wrap { max-width: none; }
+  .col { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .col h2 { font-size: 14px; margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--line);
+            display: flex; align-items: center; gap: 8px; }
+  .col h2 small { color: var(--muted); font-weight: 400; margin-left: auto; }
+  .row { display: flex; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); align-items: center; }
+  .row:last-child { border-bottom: 0; }
+  .row img { width: 40px; height: 40px; object-fit: contain; background: #fff; border-radius: 6px; flex: none; }
+  .row { align-items: flex-start; gap: 8px; padding: 10px 10px 8px 12px; }
+  .row .thumb { position: relative; flex: none; width: 44px; height: 44px; }
+  .row .thumb img { width: 44px; height: 44px; }
+  /* ster als klein rondje op de foto */
+  .row .star { position: absolute; left: -6px; top: -6px; font-size: 13px; padding: 1px 3px;
+               background: var(--card); border: 1px solid var(--line); border-radius: 999px; }
+  .row .n { flex: 1; min-width: 0; font-size: 13px; overflow-wrap: break-word; }
+  .row .line2 { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; margin-top: 3px; }
+  .row .p { flex: none; text-align: right; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .row .p small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+  .msg { padding: 40px 20px; text-align: center; color: var(--muted); }
+  .err { color: var(--bad); font-size: 13px; padding: 8px 12px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line);
+             border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
+             vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .star { border: 0; background: none; padding: 2px 4px; font-size: 18px; line-height: 1; color: var(--muted);
+          cursor: pointer; }
+  .star.on { color: #e0a100; }
+  .star:hover { color: #e0a100; }
+  #saveSearch { font-size: 18px; padding: 6px 11px; }
+  #saveSearch.on { color: #e0a100; }
+  .saved { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .saved:empty { display: none; }
+  .chip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 999px;
+          background: var(--bg); font-size: 13px; }
+  .chip button { border: 0; background: none; padding: 3px 4px 3px 10px; font-size: 13px; border-radius: 999px; }
+  .chip button.x { padding: 3px 8px 3px 2px; color: var(--muted); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none;
+                 padding: 8px 14px; font-weight: 600; color: var(--muted); }
+  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+  .group { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .group h2 { font-size: 15px; margin: 0; padding: 10px 12px; display: flex; gap: 10px; align-items: center;
+              border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .group h2 .sub { color: var(--muted); font-weight: 400; font-size: 13px; }
+  .group h2 .acts { margin-left: auto; display: flex; gap: 6px; }
+  .group h2 .acts button, .group h2 .acts a { font-size: 12px; padding: 4px 10px; font-weight: 400; }
+  .group table { border: 0; border-radius: 0; }
+  .btnlink { border: 1px solid var(--line); border-radius: 8px; color: var(--text); text-decoration: none; }
+  .up { color: var(--bad); font-size: 12px; } .down { color: var(--good); font-size: 12px; }
+  .gone { color: var(--bad); font-size: 12px; }
+  dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text);
+           padding: 18px; width: min(420px, 92vw); }
+  dialog::backdrop { background: rgb(0 0 0 / .35); }
+  dialog h3 { margin: 0 0 4px; font-size: 16px; }
+  dialog p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+  dialog label { display: block; margin-bottom: 6px; font-size: 13px; }
+  dialog input { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+                 background: var(--bg); color: var(--text); }
+  dialog .row2 { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  @media (max-width: 700px) { .hide-sm { display: none; } .filter { width: 100%; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <h1>🦷 Dentale Prijsvergelijker</h1>
+      <form id="f">
+        <input type="search" id="q" placeholder="Zoek product, merk of artikelnummer… (bv. nitril handschoenen M)" autofocus>
+        <button class="primary" id="go">Zoeken</button>
+        <button type="button" id="saveSearch" title="Zoekopdracht bewaren">☆</button>
+      </form>
+    </div>
+    <div class="saved" id="saved"></div>
+    <div class="shops" id="shops"></div>
+  </div>
+</header>
+<main>
+  <div class="wrap">
+    <div id="notices"></div>
+    <div class="tabs">
+      <button data-tab="search" class="on">Zoekresultaten</button>
+      <button data-tab="list">★ Mijn lijst <span id="favCount"></span></button>
+    </div>
+    <div id="listView" hidden></div>
+    <div id="searchView">
+    <div id="toolbar" class="toolbar" hidden>
+      <span id="summary"></span>
+      <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="onlyPriced"> Enkel met prijs</label>
+        <input class="filter" id="flt" placeholder="Filter resultaten (bv. medium, 100)">
+        <span class="seg" id="orderSeg">
+          <button data-order="match">Beste match</button>
+          <button data-order="price">Goedkoopste</button>
+        </span>
+        <span class="seg">
+          <button data-view="table" class="on">Alles samen</button>
+          <button data-view="cols">Per winkel</button>
+        </span>
+      </span>
+    </div>
+    <div id="out"><div class="msg">Typ een zoekterm om de prijzen van alle winkels te vergelijken.<br>
+      Met ☆ bewaar je een zoekopdracht of zet je een product op je lijst.</div></div>
+    </div>
+  </div>
+</main>
+
+<dialog id="favDlg">
+  <form method="dialog" id="favForm">
+    <h3>Op mijn lijst zetten</h3>
+    <p id="favWhat"></p>
+    <label for="favGroup" style="font-size:13px">Groep (zet hetzelfde product van verschillende winkels in dezelfde groep)</label>
+    <input id="favGroup" list="groupNames" autocomplete="off" required>
+    <datalist id="groupNames"></datalist>
+    <div class="row2">
+      <!-- Bewaren eerst: Enter in het tekstvak kiest de eerste knop -->
+      <button value="ok" class="primary" style="order:2">Bewaren</button>
+      <button value="cancel" formnovalidate style="order:1">Annuleren</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const COLORS = { dentaldiscount: "var(--c-dentaldiscount)", basiq: "var(--c-basiq)",
+                 dentaladdict: "var(--c-dentaladdict)", hofmeester: "var(--c-hofmeester)",
+                 denta: "var(--c-denta)", henryschein: "var(--c-henryschein)" };
+let shops = {};
+let enabled = JSON.parse(localStorageGet("enabled") || "{}");
+let view = localStorageGet("view") || "table";
+let order = localStorageGet("order") || "match";  // "match" = beste match eerst, "price" = goedkoopste eerst
+let results = null, sortKey = order === "match" ? "match" : "pp", sortDir = 1, filterText = "";
+let onlyPriced = localStorageGet("onlyPriced") === "1";
+
+function localStorageGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+const eur = v => v == null ? "" : "€ " + v.toFixed(2).replace(".", ",");
+const eurPP = v => v == null ? "" : "€ " + v.toFixed(v < 1 ? 3 : 2).replace(".", ",");
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const isOn = s => enabled[s] !== false;
+
+// Winkels waar je ingelogd was (onthouden in de browser). Staat een winkel hier
+// maar is hij nu niet meer ingelogd, dan ben je afgemeld: melding tonen.
+let wasLoggedIn = new Set(JSON.parse(localStorageGet("wasLoggedIn") || "[]"));
+function saveWasLoggedIn() { localStorageSet("wasLoggedIn", JSON.stringify([...wasLoggedIn])); }
+
+async function loadStatus() {
+  shops = await (await fetch("/api/status")).json();
+  for (const [k, st] of Object.entries(shops)) if (st.logged_in) wasLoggedIn.add(k);
+  saveWasLoggedIn();
+  renderShops();
+  renderNotices();
+  // Blijf pollen zolang er een loginvenster open is
+  if (Object.values(shops).some(s => s.login_open)) setTimeout(loadStatus, 3000);
+}
+
+function renderNotices() {
+  const lost = [...wasLoggedIn].filter(k => shops[k] && !shops[k].logged_in && !shops[k].login_open);
+  document.getElementById("notices").innerHTML = lost.map(k => `
+    <div class="notice">⚠ Je bent afgemeld bij <b>${esc(shops[k].label)}</b> — de prijzen van deze winkel
+      zijn nu mogelijk niet (of niet jouw klantprijzen).
+      <button data-login="${k}" class="primary">Opnieuw inloggen</button>
+      <button class="x" data-dismiss="${k}" title="Melding sluiten">×</button>
+    </div>`).join("");
+}
+document.getElementById("notices").addEventListener("click", async e => {
+  const { login, dismiss } = e.target.dataset;
+  if (login) { await fetch(`/api/login/${login}`, { method: "POST" }); loadStatus(); }
+  if (dismiss) { wasLoggedIn.delete(dismiss); saveWasLoggedIn(); renderNotices(); }
+});
+
+function renderShops() {
+  document.getElementById("shops").innerHTML = Object.entries(shops).map(([k, s]) => `
+    <label class="shop" title="${esc(s.note)}">
+      <input type="checkbox" data-shop="${k}" ${isOn(k) ? "checked" : ""}>
+      <span class="dot" style="background:${COLORS[k]}"></span>
+      <b>${esc(s.label)}</b>
+      <span class="state ${s.logged_in ? "ok" : ""}">
+        ${s.login_open ? '<span class="spinner"></span>login-venster open' : s.logged_in ? "✓ ingelogd" : "niet ingelogd"}
+      </span>
+      ${s.logged_in
+        ? `<button data-logout="${k}">Uitloggen</button>`
+        : `<button data-login="${k}" ${s.login_open ? "disabled" : ""}>Inloggen</button>`}
+    </label>`).join("");
+}
+
+document.getElementById("shops").addEventListener("click", async e => {
+  const login = e.target.dataset.login, logout = e.target.dataset.logout;
+  if (login || logout) e.preventDefault();
+  if (login) { await fetch(`/api/login/${login}`, { method: "POST" }); loadStatus(); }
+  if (logout) {
+    wasLoggedIn.delete(logout); saveWasLoggedIn();
+    await fetch(`/api/logout/${logout}`, { method: "POST" }); loadStatus();
+  }
+});
+document.getElementById("shops").addEventListener("change", e => {
+  const k = e.target.dataset.shop;
+  if (!k) return;
+  enabled[k] = e.target.checked;
+  localStorageSet("enabled", JSON.stringify(enabled));
+  render();
+});
+
+let lastQuery = "";
+async function runSearch(q) {
+  q = q.trim();
+  if (!q) return;
+  lastQuery = q;
+  document.getElementById("q").value = q;
+  setTab("search");
+  renderSaved();
+  const btn = document.getElementById("go");
+  btn.disabled = true;
+  document.getElementById("toolbar").hidden = true;
+  document.getElementById("out").innerHTML = `<div class="msg"><span class="spinner"></span>Zoeken bij alle winkels…</div>`;
+  try {
+    loadStatus();  // loginstatus tegelijk controleren
+    results = await (await fetch("/api/search?q=" + encodeURIComponent(q))).json();
+    document.getElementById("flt").value = filterText = "";
+    render();
+  } catch (err) {
+    document.getElementById("out").innerHTML = `<div class="msg err">Zoeken mislukt: ${esc(err)}</div>`;
+  } finally { btn.disabled = false; }
+}
+document.getElementById("f").addEventListener("submit", e => {
+  e.preventDefault();
+  runSearch(document.getElementById("q").value);
+});
+
+// ---------- favorieten (bewaard in favorites.json via de server) ----------
+let favs = { searches: [], groups: [] };
+let tab = "search";
+const favKey = it => it.site + "|" + it.code;
+const favIndex = () => new Set(favs.groups.flatMap(g => g.items.map(favKey)));
+const today = () => new Date().toISOString().slice(0, 10);
+const shortDate = d => d ? d.slice(8, 10) + "/" + d.slice(5, 7) : "";
+
+async function loadFavs() {
+  try { favs = await (await fetch("/api/favorites")).json(); } catch {}
+  favs.searches ||= []; favs.groups ||= [];
+  renderSaved(); renderFavCount();
+}
+async function saveFavs() {
+  renderSaved(); renderFavCount();
+  await fetch("/api/favorites", { method: "PUT", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify(favs) });
+}
+function renderFavCount() {
+  const n = favs.groups.reduce((a, g) => a + g.items.length, 0);
+  document.getElementById("favCount").textContent = n ? `(${n})` : "";
+}
+
+// bewaarde zoekopdrachten
+function renderSaved() {
+  const cur = document.getElementById("q").value.trim().toLowerCase();
+  const on = favs.searches.some(x => x.toLowerCase() === cur);
+  const b = document.getElementById("saveSearch");
+  b.textContent = on ? "★" : "☆"; b.classList.toggle("on", on);
+  b.title = on ? "Bewaarde zoekopdracht verwijderen" : "Zoekopdracht bewaren";
+  document.getElementById("saved").innerHTML = favs.searches.map((q, i) =>
+    `<span class="chip"><button data-run="${i}" title="Zoek '${esc(q)}' bij alle winkels">${esc(q)}</button>` +
+    `<button class="x" data-del="${i}" title="Verwijderen">×</button></span>`).join("");
+}
+document.getElementById("q").addEventListener("input", renderSaved);
+document.getElementById("saveSearch").addEventListener("click", () => {
+  const q = document.getElementById("q").value.trim();
+  if (!q) return;
+  const i = favs.searches.findIndex(x => x.toLowerCase() === q.toLowerCase());
+  if (i >= 0) favs.searches.splice(i, 1); else favs.searches.push(q);
+  saveFavs();
+});
+document.getElementById("saved").addEventListener("click", e => {
+  const run = e.target.dataset.run, del = e.target.dataset.del;
+  if (run != null) runSearch(favs.searches[run]);
+  if (del != null) { favs.searches.splice(del, 1); saveFavs(); }
+});
+
+// ster bij een product
+let shown = [];  // producten zoals nu getoond; ster verwijst via index
+const starBtn = (it, i) => {
+  const on = favIndex().has(favKey(it));
+  return `<button class="star ${on ? "on" : ""}" data-star="${i}" title="${on ? "Van mijn lijst halen" : "Op mijn lijst zetten"}">${on ? "★" : "☆"}</button>`;
+};
+document.getElementById("out").addEventListener("click", e => {
+  const i = e.target.dataset.star;
+  if (i == null) return;
+  const it = shown[i];
+  if (favIndex().has(favKey(it))) { removeFav(favKey(it)); render(); }
+  else openFavDialog(it);
+});
+function removeFav(key) {
+  favs.groups.forEach(g => g.items = g.items.filter(x => favKey(x) !== key));
+  favs.groups = favs.groups.filter(g => g.items.length);
+  saveFavs();
+}
+
+let pendingFav = null;
+function openFavDialog(it) {
+  pendingFav = it;
+  document.getElementById("favWhat").textContent = `${shops[it.site]?.label || it.site}: ${it.name}`;
+  document.getElementById("groupNames").innerHTML = favs.groups.map(g => `<option value="${esc(g.name)}">`).join("");
+  const inp = document.getElementById("favGroup");
+  inp.value = lastQuery;
+  document.getElementById("favDlg").showModal();
+  inp.select();
+}
+document.getElementById("favDlg").addEventListener("close", () => {
+  const dlg = document.getElementById("favDlg");
+  const name = document.getElementById("favGroup").value.trim();
+  if (dlg.returnValue !== "ok" || !name || !pendingFav) return;
+  let g = favs.groups.find(x => x.name.toLowerCase() === name.toLowerCase());
+  if (!g) favs.groups.push(g = { name, items: [] });
+  const { pp, ...item } = pendingFav;
+  g.items.push({ ...item, updated: today() });
+  pendingFav = null;
+  saveFavs(); render();
+});
+
+// tabbladen
+function setTab(t) {
+  tab = t;
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  document.getElementById("searchView").hidden = t !== "search";
+  document.getElementById("listView").hidden = t !== "list";
+  document.body.classList.toggle("wide", t === "search" && view === "cols" && !!results);
+  if (t === "list") renderList();
+}
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+// Mijn lijst
+function renderList() {
+  const el = document.getElementById("listView");
+  if (!favs.groups.length) {
+    el.innerHTML = `<div class="msg">Je lijst is nog leeg.<br>Zoek een product en klik op ☆ om het hier te bewaren.
+      Zet hetzelfde product van verschillende winkels in dezelfde groep om ze te vergelijken.</div>`;
+    return;
+  }
+  const withPP = it => ({ ...it, pp: it.price != null && it.pieces ? it.price / it.pieces : null });
+  el.innerHTML = `
+    <div class="toolbar">
+      <span>${favs.groups.length} ${favs.groups.length === 1 ? "groep" : "groepen"} · datum rechts = laatst bijgewerkt</span>
+      <button class="primary" id="refreshAll">↻ Prijzen vernieuwen</button>
+    </div>` + favs.groups.map((g, gi) => {
+      const items = g.items.map(withPP).sort((a, b) => (a.pp ?? a.price ?? 1e9) - (b.pp ?? b.price ?? 1e9));
+      const cmp = items.filter(i => !i.missing && i.price != null);
+      const key = i => i.pp ?? i.price;
+      const best = cmp.length ? Math.min(...cmp.map(key)) : null;
+      const cheapest = cmp.find(i => key(i) === best);
+      return `<div class="group">
+        <h2>${esc(g.name)} <span class="sub">${items.length} product${items.length > 1 ? "en" : ""}</span>
+          <span class="acts">
+            ${cheapest ? `<a class="btnlink" href="${esc(cheapest.url)}" target="_blank" style="padding:4px 10px">Open goedkoopste</a>` : ""}
+            <button data-research="${gi}">Zoek opnieuw</button>
+            <button data-delgroup="${gi}">Verwijder groep</button>
+          </span></h2>
+        <table><tbody>${items.map(it => {
+          const diff = it.prev_price != null && it.price != null && it.prev_price !== it.price
+            ? (it.price > it.prev_price ? `<span class="up">▲ was ${eur(it.prev_price)}</span>` : `<span class="down">▼ was ${eur(it.prev_price)}</span>`) : "";
+          return `<tr class="${best != null && !it.missing && key(it) === best ? "best" : ""}">
+            <td style="width:30px"><button class="star on" data-unfav="${esc(favKey(it))}" title="Van mijn lijst halen">★</button></td>
+            <td class="hide-sm" style="width:56px">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}</td>
+            <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
+              <div class="code">${esc(it.pack)}${it.pack && it.code ? " · " : ""}${it.code ? "art. " + esc(it.code) : ""}
+              ${it.missing ? ` · <span class="gone">niet meer gevonden bij laatste vernieuwing</span>` : ""}</div></td>
+            <td><span class="tag"><span class="dot" style="background:${COLORS[it.site]}"></span>${esc(shops[it.site]?.label || it.site)}</span></td>
+            <td class="num">${priceCell(it)}<div>${diff}</div></td>
+            <td class="num pp">${it.pp != null ? eurPP(it.pp) + "/st" : ""}</td>
+            <td class="num code hide-sm">${shortDate(it.updated)}</td>
+          </tr>`; }).join("")}</tbody></table>
+      </div>`;
+    }).join("");
+}
+document.getElementById("listView").addEventListener("click", async e => {
+  const d = e.target.dataset;
+  if (d.unfav) { removeFav(d.unfav); renderList(); }
+  if (d.delgroup != null && confirm(`Groep "${favs.groups[d.delgroup].name}" verwijderen?`)) {
+    favs.groups.splice(d.delgroup, 1); saveFavs(); renderList();
+  }
+  if (d.research != null) runSearch(favs.groups[d.research].name);
+  if (e.target.id === "refreshAll") refreshAll(e.target);
+});
+async function refreshAll(btn) {
+  const all = favs.groups.flatMap(g => g.items);
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span>Vernieuwen (${all.length})…`;
+  try {
+    const res = await (await fetch("/api/refresh", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: all.map(({ site, code, name }) => ({ site, code, name })) }) })).json();
+    res.items.forEach((fresh, i) => {
+      const it = all[i];
+      if (!fresh) { it.missing = true; return; }
+      if (fresh.price != null && it.price != null && fresh.price !== it.price) it.prev_price = it.price;
+      Object.assign(it, { price: fresh.price, old_price: fresh.old_price, volume_price: fresh.volume_price,
+                          url: fresh.url, image: fresh.image || it.image, missing: false, updated: today() });
+    });
+    await saveFavs();
+  } finally { renderList(); }
+}
+
+const op = document.getElementById("onlyPriced");
+op.checked = onlyPriced;
+op.addEventListener("change", () => { onlyPriced = op.checked; localStorageSet("onlyPriced", onlyPriced ? "1" : "0"); render(); });
+document.getElementById("flt").addEventListener("input", e => { filterText = e.target.value.toLowerCase(); render(); });
+document.querySelectorAll(".seg button[data-view]").forEach(b => b.addEventListener("click", () => {
+  view = b.dataset.view; localStorageSet("view", view); render();
+}));
+document.querySelectorAll(".seg button[data-order]").forEach(b => b.addEventListener("click", () => {
+  order = b.dataset.order; localStorageSet("order", order);
+  sortKey = order === "match" ? "match" : "pp"; sortDir = 1; render();
+}));
+
+// ---------- matchscore: hoe goed past een product bij de zoekopdracht ----------
+function norm(t) {
+  return String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/(\d),(\d)/g, "$1.$2")                       // 2,7 -> 2.7
+    .replace(/\b([abcd])[\s-]*(\d(?:\.5)?)\s*(d)?\b/g,     // kleur: "A 2 D", "a-3d" -> a2d
+             (m, a, b, c) => a + b + (c || ""));
+}
+const tokens = t => norm(t).split(/[^a-z0-9.]+/).map(x => x.replace(/^\.+|\.+$/g, "")).filter(Boolean);
+function matchScore(qTok, it) {
+  if (!qTok.length) return 1;
+  const words = tokens(it.name + " " + it.pack + " " + it.code);
+  const set = new Set(words);
+  let sum = 0;
+  for (const q of qTok) {
+    if (set.has(q)) sum += 1;                                          // exact woord
+    else if (q.length >= 3 && words.some(w => w.startsWith(q))) sum += 0.5;  // "flow" in "flower"
+  }
+  return sum / qTok.length;
+}
+
+function allItems() {
+  const qTok = tokens(lastQuery);
+  const words = filterText.split(/\s+/).filter(Boolean);
+  const out = [];
+  for (const [site, r] of Object.entries(results || {})) {
+    if (!isOn(site)) continue;
+    for (const it of r.items) {
+      const hay = (it.name + " " + it.pack + " " + it.code).toLowerCase();
+      if (onlyPriced && it.price == null) continue;
+      if (words.every(w => hay.includes(w))) out.push({ ...it, pp: it.price != null && it.pieces ? it.price / it.pieces : null,
+                                                          score: matchScore(qTok, it) });
+    }
+  }
+  return out;
+}
+
+function priceCell(it) {
+  if (it.price == null) return `<span class="none">log in<span class="hint"> voor prijs</span></span>`;
+  let s = (it.old_price ? `<span class="old">${eur(it.old_price)}</span>` : "") + `<b>${eur(it.price)}</b>`;
+  if (it.volume_price) s += `<span class="range"><span class="hint">staffel: </span>vanaf ${eur(it.volume_price)} bij grote aantallen</span>`;
+  return s;
+}
+
+function render() {
+  if (!results) return;
+  document.querySelectorAll(".seg button[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === view));
+  document.querySelectorAll(".seg button[data-order]").forEach(b => b.classList.toggle("on", b.dataset.order === order));
+  document.body.classList.toggle("wide", view === "cols" && tab === "search");
+  const items = allItems();
+  const errors = Object.entries(results).filter(([s, r]) => isOn(s) && r.error)
+    .map(([s, r]) => `<div class="err">${esc(shops[s]?.label || s)}: ${esc(r.error)}</div>`).join("");
+  const counts = Object.entries(results).filter(([s]) => isOn(s))
+    .map(([s, r]) => `${shops[s]?.label || s}: ${r.items.length}`).join(" · ");
+  document.getElementById("summary").textContent = `${items.length} resultaten  —  ${counts}`;
+  document.getElementById("toolbar").hidden = false;
+
+  // goedkoopste markeren, maar enkel binnen de producten die het best bij de zoekopdracht passen
+  const topScore = items.length ? Math.max(...items.map(i => i.score)) : 0;
+  const isTop = it => it.score >= topScore - 1e-9;
+  const top = items.filter(i => isTop(i) && i.price != null);
+  const usePP = top.length && top.every(i => i.pp != null);   // anders op prijs (bv. spuitjes in gram)
+  const cmp = i => usePP ? i.pp : i.price;
+  const bestVal = top.length ? Math.min(...top.map(cmp)) : null;
+  const isBest = it => bestVal != null && isTop(it) && it.price != null && cmp(it) === bestVal;
+  const weak = it => order === "match" && topScore > 0 && it.score < topScore - 1e-9 ? "weak" : "";
+  const byMatch = (a, b) => (b.score - a.score) || ((a.price ?? 1e9) - (b.price ?? 1e9));
+
+  if (view === "cols") {
+    shown = [];
+    document.getElementById("out").innerHTML = errors + `<div class="cols">` +
+      Object.keys(results).filter(isOn).map(site => {
+        const list = items.filter(i => i.site === site)
+          .sort(order === "match" ? byMatch : (a, b) => (a.price ?? 1e9) - (b.price ?? 1e9));
+        return `<div class="col"><h2><span class="dot" style="background:${COLORS[site]}"></span>${esc(shops[site]?.label)}<small>${list.length}</small></h2>` +
+          (list.length ? list.map(it => { shown.push(it); const i = shown.length - 1; return `
+            <div class="row ${isBest(it) ? "best" : weak(it)}">
+              <div class="thumb">
+                ${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}
+                ${starBtn(it, i)}
+              </div>
+              <div class="n"><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
+                <div class="line2"><span class="code">${esc(it.pack)}</span>
+                  <span class="p">${priceCell(it)}${it.pp != null ? `<small class="pp">${eurPP(it.pp)}/st</small>` : ""}</span></div>
+              </div>
+            </div>`; }).join("") : `<div class="msg">Geen resultaten</div>`) + `</div>`;
+      }).join("") + `</div>`;
+    return;
+  }
+
+  const val = (it, k) => k === "name" ? it.name.toLowerCase() : k === "site" ? it.site : it[k];
+  items.sort((a, b) => {
+    if (sortKey === "match") return byMatch(a, b);
+    const x = val(a, sortKey), y = val(b, sortKey);
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+  });
+  shown = items;
+  const arrow = k => sortKey === k ? (sortDir > 0 ? " ▲" : " ▼") : "";
+  document.getElementById("out").innerHTML = errors + (items.length ? `
+    <table>
+      <thead><tr>
+        <th></th>
+        <th class="hide-sm"></th>
+        <th data-sort="name">Product${arrow("name")}</th>
+        <th data-sort="site">Winkel${arrow("site")}</th>
+        <th class="num" data-sort="price">Prijs${arrow("price")}</th>
+        <th class="num hide-sm" data-sort="pieces">Stuks${arrow("pieces")}</th>
+        <th class="num" data-sort="pp">Per stuk${arrow("pp")}</th>
+      </tr></thead>
+      <tbody>${items.map((it, i) => `
+        <tr class="${isBest(it) ? "best" : weak(it)}">
+          <td style="width:30px">${starBtn(it, i)}</td>
+          <td class="hide-sm">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}</td>
+          <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
+              <div class="code">${esc(it.pack)}${it.pack && it.code ? " · " : ""}${it.code ? "art. " + esc(it.code) : ""}</div></td>
+          <td><span class="tag"><span class="dot" style="background:${COLORS[it.site]}"></span>${esc(shops[it.site]?.label || it.site)}</span></td>
+          <td class="num">${priceCell(it)}</td>
+          <td class="num hide-sm">${it.pieces ?? ""}</td>
+          <td class="num pp">${it.pp != null ? eurPP(it.pp) : ""}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : `<div class="msg">Geen resultaten${filterText ? " voor deze filter" : ""}.</div>`);
+  document.querySelectorAll("th[data-sort]").forEach(th => th.addEventListener("click", () => {
+    const k = th.dataset.sort;
+    sortDir = sortKey === k ? -sortDir : 1; sortKey = k;
+    order = k === "pp" || k === "price" ? "price" : order; render();
+  }));
+}
+
+loadStatus();
+loadFavs();
+</script>
+</body>
+</html>

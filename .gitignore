@@ -1,0 +1,8 @@
+.venv/
+sessions/
+profiles/
+__pycache__/
+favorites.json
+.claude/
+*.tmp
+.DS_Store
