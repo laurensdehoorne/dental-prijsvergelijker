@@ -40,6 +40,8 @@ def find_browser():
                      [os.path.join(d, r"Microsoft\Edge\Application\msedge.exe") for d in dirs if d]
     else:
         candidates = [shutil.which(n) or "" for n in ("google-chrome", "chromium", "chromium-browser", "microsoft-edge")]
+    if os.environ.get("PRIJSVERGELIJKER_BROWSER") == "edge":  # voor tests: Edge forceren
+        candidates = [c for c in candidates if "edge" in c.lower()]
     for c in candidates:
         if c and os.path.exists(c):
             return c
@@ -114,11 +116,25 @@ def bring_to_front(pid):
         pass
 
 
+def browser_env():
+    """Omgeving voor Chrome/Edge zonder __COMPAT_LAYER. Staat die erin (op Windows
+    soms geërfd van de app), dan herstart Edge zichzelf (--edge-skip-compat-layer-relaunch):
+    het proces dat wij startten stopt meteen terwijl het venster gewoon open blijft."""
+    env = os.environ.copy()
+    env.pop("__COMPAT_LAYER", None)
+    return env
+
+
+def alive(chrome, port):
+    """Draait de browser nog? Ook als hij zichzelf herstartte (ander proces, zelfde poort)."""
+    return chrome.poll() is None or open_tabs(port) >= 0
+
+
 def watchdog(chrome, port):
     """Vangnet naast de hoofdlus: als het venster dicht is (of nooit opende), alles
     afsluiten, ook als Playwright ergens blijft wachten op een gesloten pagina."""
     started, seen = time.time(), False
-    while chrome.poll() is None:
+    while alive(chrome, port):
         time.sleep(2)
         tabs = open_tabs(port)
         seen = seen or tabs > 0
@@ -154,18 +170,20 @@ def main(site):
         "--no-default-browser-check",
         "--window-size=1100,850",
         LOGIN_URLS[site],
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=browser_env())
     threading.Thread(target=watchdog, args=(chrome, port), daemon=True).start()
 
     try:
         with sync_playwright() as p:
             browser = None
+            launched = time.time()
             for _ in range(60):  # wachten tot Chrome klaar is
                 try:
                     browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
                     break
                 except Error:
-                    if chrome.poll() is not None:
+                    # bij een herstart van de browser is de poort even weg: niet te snel opgeven
+                    if not alive(chrome, port) and time.time() - launched > 10:
                         return
                     time.sleep(0.5)
             if browser is None:
@@ -175,7 +193,7 @@ def main(site):
             seen_page = False
             origins_seen = []
             last_count = -1
-            while chrome.poll() is None and browser.is_connected():
+            while browser.is_connected() and alive(chrome, port):
                 tabs = open_tabs(port)
                 if tabs > 0 and not seen_page:
                     seen_page = True

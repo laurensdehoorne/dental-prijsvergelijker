@@ -45,3 +45,28 @@ jobs:
           $j = Get-Content "$env:APPDATA\Prijsvergelijker\sessions\basiq.json" -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json
           "cookies in sessiebestand: $($j.cookies.Count) -> $(($j.cookies | ForEach-Object name) -join ', ')"
           Get-Process Prijsvergelijker, chrome -ErrorAction SilentlyContinue | Stop-Process -Force
+      - name: Regressie - login met __COMPAT_LAYER en Edge (v1.0.3)
+        shell: pwsh
+        run: |
+          # Zo erfde het loginproces de omgeving van de app op de Windows-pc van de gebruiker:
+          # Edge herstartte zichzelf, login.py dacht dat het venster dicht was -> 0 cookies.
+          Get-Process Prijsvergelijker, chrome, msedge -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep 2
+          Remove-Item "$env:APPDATA\Prijsvergelijker\sessions\basiq.json", "$env:APPDATA\Prijsvergelijker\log.txt" -ErrorAction SilentlyContinue
+          $env:__COMPAT_LAYER = "Installer"
+          $env:PRIJSVERGELIJKER_BROWSER = "edge"
+          $exe = Resolve-Path dist/Prijsvergelijker/Prijsvergelijker.exe
+          Start-Process $exe -ArgumentList "--login", "basiq"
+          Start-Sleep 30
+          "--- browserprocessen"
+          Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'msedge|chrome' -and $_.CommandLine -match 'profiles\\basiq' -and $_.CommandLine -notmatch '--type=' } |
+            ForEach-Object { "{0} {1}" -f $_.Name, $_.CommandLine.Substring(0, [Math]::Min(260, $_.CommandLine.Length)) }
+          $relaunch = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'edge-skip-compat-layer-relaunch' }
+          "Edge herstart door compat layer: $([bool]$relaunch)"
+          "--- log.txt"
+          Get-Content "$env:APPDATA\Prijsvergelijker\log.txt" -ErrorAction SilentlyContinue
+          $j = Get-Content "$env:APPDATA\Prijsvergelijker\sessions\basiq.json" -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json
+          $n = if ($j) { $j.cookies.Count } else { 0 }
+          "cookies in sessiebestand: $n"
+          Get-Process Prijsvergelijker, msedge -ErrorAction SilentlyContinue | Stop-Process -Force
+          if ($n -lt 1) { Write-Error "REGRESSIE: geen cookies bewaard met __COMPAT_LAYER"; exit 1 }

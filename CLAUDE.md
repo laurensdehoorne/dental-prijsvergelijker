@@ -25,21 +25,31 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
 - Release: `prijsvergelijker.spec` (PyInstaller) + `.github/workflows/release.yml`
   (tag `vX.Y.Z` pushen). Versie staat in `paths.py`.
 
-## Open probleem (sept 2026): loginvensters werken niet op Windows
-Gebruiker meldt: in de Windows-app (release v1.0.2) "werken de loginvensters niet".
-Exacte symptoom nog onbekend — **eerst uitzoeken**: opent er geen Chrome-venster, opent
-het wel maar blijft de app "niet ingelogd", of een foutmelding?
+## Opgelost in v1.0.3: loginvensters werkten niet op Windows
+**Symptoom:** in de Windows-app opende het loginvenster (Edge; geen Chrome op die pc), maar
+na inloggen bleef de app "niet ingelogd"; `log.txt` bleef leeg, geen cookies bewaard.
 
-Wat al bekend is:
-- Op een GitHub Windows-runner (`.github/workflows/windows-test.yml`) werkt het wél:
-  `Prijsvergelijker.exe --login basiq` start, Chrome opent de loginpagina, 13 cookies
-  worden bewaard. (Dental Discount toont op runners een Cloudflare-controle → 0 cookies,
-  dat is een runner-artefact.)
-- v1.0.2 voegde toe: `AllowSetForegroundWindow` in `app.py` + `page.bring_to_front()` in
-  `login.py` (vermoeden: venster opende achter de app), cookie-fallback, logregels
-  `[login <site>] N cookies bewaard` in `%APPDATA%\Prijsvergelijker\log.txt`.
+**Oorzaak:** het loginproces (gestart via `/api/login/<site>`) erfde de omgevingsvariabele
+`__COMPAT_LAYER` van de app. Edge herstart zichzelf dan (`--edge-skip-compat-layer-relaunch`):
+het Edge-proces dat `login.py` startte stopt meteen terwijl het venster open blijft.
+`login.py` volgde dat proces met `chrome.poll()`, dacht dat het venster dicht was en stopte.
+Bewijs: `Prijsvergelijker.exe --login basiq` rechtstreeks → werkt (11 cookies); met
+`__COMPAT_LAYER=Installer` → faalt identiek aan via de app.
 
-Nuttige checks op de Windows-pc:
+**Fix (`login.py`):**
+- `browser_env()`: browser starten zonder `__COMPAT_LAYER`.
+- `alive(chrome, port)`: browser telt als actief als het proces draait óf de debugpoort
+  antwoordt; gebruikt in watchdog, hoofdlus en verbind-wachtlus (die geeft pas na 10 s op).
+- `PRIJSVERGELIJKER_BROWSER=edge` forceert Edge (voor tests).
+- Regressietest: stap "Regressie - login met __COMPAT_LAYER en Edge" in
+  `.github/workflows/windows-test.yml` (faalt als er 0 cookies bewaard worden).
+
+Eerder (v1.0.2): `AllowSetForegroundWindow` + `page.bring_to_front()` (venster vooraan),
+cookie-fallback `Network.getAllCookies`, logregels `[login <site>] N cookies bewaard`.
+Let op: GitHub-runners krijgen bij Dental Discount een Cloudflare-controle → 0 cookies;
+test daarom met Basiq.
+
+Nuttige checks bij loginproblemen op Windows (naslag):
 1. `%APPDATA%\Prijsvergelijker\log.txt` lezen.
 2. Is Chrome geïnstalleerd? (`login.find_browser()`; anders Edge.)
 3. Handmatig: `dist\Prijsvergelijker\Prijsvergelijker.exe --login basiq` of vanuit broncode
