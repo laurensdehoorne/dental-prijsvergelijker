@@ -10,7 +10,7 @@
     --accent: #0f6fde; --good: #16794a; --good-bg: #e5f5ec; --warn: #9a5b00; --warn-bg: #fff3dc;
     --bad: #b42318;
     --c-dentaldiscount: #e2560f; --c-basiq: #0f6fde; --c-dentaladdict: #7a3fd1; --c-hofmeester: #0e8a7d;
-    --c-denta: #c2185b; --c-henryschein: #1f3f8f;
+    --c-denta: #c2185b; --c-henryschein: #1f3f8f; --c-adt: #b8860b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -269,7 +269,7 @@
 <script>
 const COLORS = { dentaldiscount: "var(--c-dentaldiscount)", basiq: "var(--c-basiq)",
                  dentaladdict: "var(--c-dentaladdict)", hofmeester: "var(--c-hofmeester)",
-                 denta: "var(--c-denta)", henryschein: "var(--c-henryschein)" };
+                 denta: "var(--c-denta)", henryschein: "var(--c-henryschein)", adt: "var(--c-adt)" };
 let shops = {};
 let enabled = JSON.parse(localStorageGet("enabled") || "{}");
 let view = localStorageGet("view") || "table";

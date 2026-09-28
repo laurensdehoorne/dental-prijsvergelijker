@@ -190,6 +190,7 @@ class OrdentShop:
 
 dentaldiscount = OrdentShop("dentaldiscount", "https://www.dentaldiscount.com/", "nl-BE", "nl-be/")
 hofmeester = OrdentShop("hofmeester", "https://www.hofmeester.nl/", "nl-NL", "")
+adt = OrdentShop("adt", "https://www.adt.be/", "nl-BE", "")
 
 
 # ---------- Basiq Dental (SAP Commerce / Spartacus) ----------
@@ -474,6 +475,11 @@ SITES = {
     "hofmeester": {
         "label": "Hofmeester", "search": hofmeester.search, "logged_in": hofmeester.logged_in,
         "login_url": "https://www.hofmeester.nl/login",
+        "note": "Prijzen enkel na login",
+    },
+    "adt": {
+        "label": "ADT", "search": adt.search, "logged_in": adt.logged_in,
+        "login_url": "https://www.adt.be/login",
         "note": "Prijzen enkel na login",
     },
     "denta": {

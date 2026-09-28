@@ -204,16 +204,25 @@ class Denta:
     def add(self, item, qty):
         # zoals de knop 'In winkelmandje' op de productpagina: eerst de pagina lezen
         _, page = http_get(item["url"], {"Cookie": self._ck()})
+        # gewoon artikel (/artikel/...) of één variant van een artikel (/variant-artikel/..., bv. een maat)
         ap = re.search(r'<[^>]+id="AddProduct"[^>]*>', page)
-        item_no = re.search(r'id="ItemNo"[^>]*>([^<]*)<', page)
-        if not ap or not item_no:
+        av = re.search(r'<[^>]+id="AddVariant"[^>]*>', page)
+        item_no = (re.search(r'id="ItemNo"[^>]*>([^<]*)<', page)
+                   or re.search(r'id="itemNo"[^>]*value="([^"]*)"', page))
+        if not (ap or av) or not item_no:
             raise CartError("Denta: dit product kan niet rechtstreeks in het mandje (open de productpagina).")
-        attr = lambda n: html.unescape((re.search(rf'data-{n}="([^"]*)"', ap.group(0)) or [None, ""])[1])
-        uom = re.search(r'id="UOMItem"[^>]*value="([^"]*)"', page)
-        form = {"itemTitle": attr("title"), "type": "product", "itemNo": item_no.group(1).strip(),
-                "uom": uom.group(1) if uom else "", "basketType": 0, "itemType": attr("type"),
-                "itemUrl": attr("url"), "allItems": "", "family": "", "gamma": "", "subgamma": "",
-                "query": attr("qry"), "quantity": qty}
+        tag = (ap or av).group(0)
+        attr = lambda n: html.unescape((re.search(rf'data-{n}="([^"]*)"', tag) or [None, ""])[1])
+        if ap:
+            uom = re.search(r'id="UOMItem"[^>]*value="([^"]*)"', page)
+            form = {"itemTitle": attr("title"), "type": "product", "itemNo": item_no.group(1).strip(),
+                    "uom": uom.group(1) if uom else "", "basketType": 0, "itemType": attr("type"),
+                    "itemUrl": attr("url"), "allItems": "", "family": "", "gamma": "", "subgamma": "",
+                    "query": attr("qry"), "quantity": qty}
+        else:
+            form = {"itemTitle": attr("title").strip(), "type": "variant", "itemNo": item_no.group(1).strip(),
+                    "quantity": qty, "uom": "", "basketType": 0, "itemType": attr("type"),
+                    "itemUrl": attr("url"), "allItems": "", "variantUrl": attr("variant-url")}
 
         class NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, *a, **k):
@@ -305,6 +314,7 @@ CARTS = {
     "basiq": Basiq(),
     "dentaladdict": DentalAddict(),
     "hofmeester": Ordent(sites.hofmeester, "Hofmeester", "cart"),
+    "adt": Ordent(sites.adt, "ADT", "cart"),
     "denta": Denta(),
     "henryschein": HenrySchein(),
 }
@@ -315,6 +325,7 @@ DEFAULT_SHIPPING = {
     "basiq": {"free_from": 0, "cost": 0},
     "dentaladdict": {"free_from": 150, "cost": 9.00},
     "hofmeester": {"free_from": 100, "cost": 4.95},
+    "adt": {"free_from": 175, "cost": 7.95},
     "denta": {"free_from": 150, "cost": 6.50},
     "henryschein": {"free_from": None, "cost": None},
 }

@@ -8,6 +8,7 @@ Desktop-app voor **Mac en Windows**. Een lokale webapp die één zoekopdracht te
 | Basiq Dental (BE) | publieke webshopprijs | klantprijs (indien anders) |
 | Dental Addict (BE) | publieke prijs | prijs van je klantengroep |
 | Hofmeester (NL) | geen prijzen | exacte prijs |
+| ADT (BE) | geen prijzen | exacte prijs |
 | Denta (BE) | geen prijzen | exacte prijs |
 | Henry Schein (BE) | geen prijzen | exacte prijs |
 
