@@ -73,6 +73,19 @@ def snapshot(browser, ctx):
         cookies = cdp.send("Storage.getCookies")["cookies"]
     finally:
         cdp.detach()
+    if not cookies:
+        # Op Windows geeft de browserverbinding soms geen cookies terug: via het tabblad zelf
+        for page in ctx.pages:
+            try:
+                s = ctx.new_cdp_session(page)
+                try:
+                    cookies = s.send("Network.getAllCookies")["cookies"]
+                finally:
+                    s.detach()
+            except Error:
+                continue
+            if cookies:
+                break
     return {
         "cookies": cookies,
         "origins": [{"origin": o, "localStorage": ls} for o, ls in origins.items()],
@@ -161,6 +174,7 @@ def main(site):
             started = time.time()
             seen_page = False
             origins_seen = []
+            last_count = -1
             while chrome.poll() is None and browser.is_connected():
                 tabs = open_tabs(port)
                 if tabs > 0 and not seen_page:
@@ -183,6 +197,10 @@ def main(site):
                         origins_seen[:] = known.values()
                         state["origins"] = origins_seen
                         save(state, out)
+                        n = len(state["cookies"])
+                        if n != last_count:  # in het logbestand: helpt bij problemen
+                            print(f"[login {site}] {n} cookies bewaard", flush=True)
+                            last_count = n
                 time.sleep(1.5)
     finally:
         if chrome.poll() is None:
