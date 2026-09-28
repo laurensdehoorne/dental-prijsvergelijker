@@ -552,9 +552,14 @@ def henryschein_search(query):
                    image=HS_BASE + imgs[-1] if imgs and imgs[-1].startswith("/") else ""),
             "_uom": uom.group(1) if uom else "",
         })
+    return _hs_apply_prices(body, products, search_url)
+
+
+def _hs_apply_prices(body, products, referer):
+    """Ontbrekende prijzen apart ophalen (ingelogd) en de eenheid klaarzetten voor het mandje."""
     if any(p["price"] is None for p in products):
         try:
-            prices = _hs_prices(body, products, search_url)
+            prices = _hs_prices(body, products, referer)
         except Exception:
             prices = {}
         for p in products:
@@ -564,6 +569,46 @@ def henryschein_search(query):
     for p in products:
         p["uom"] = p.pop("_uom") or "ST"  # nodig om in het mandje te leggen
     return products
+
+
+def henryschein_lists():
+    """'Mijn bestellijsten': elke lijst met zijn producten en actuele prijzen. Enkel lezen:
+    alleen de links 'Bekijken/wijzigen' (ShoppingListView) worden geopend."""
+    body = _hs_get(HS_BASE + "/be-nl/Shopping/ShoppingLists.aspx")
+    out = []
+    for raw in re.findall(r"data-val='(\{[^']*\})'", body):
+        try:
+            meta = json.loads(html.unescape(raw))
+        except ValueError:
+            continue
+        url = meta.get("SourceUrl") or ""
+        if not url.startswith(HS_BASE + "/be-nl/Shopping/ShoppingListView.aspx?") or meta.get("IsHidden"):
+            continue
+        items = _hs_list_items(url) if meta.get("ProductsCount") else []
+        out.append({"name": f"Bestellijst {meta.get('Name', '')}".strip(), "items": items, "ordered": False})
+    return out
+
+
+def _hs_list_items(url):
+    page = _hs_get(url)
+    chunks = re.split(r'<a id="[^"]*ucProductMiniViewer_lnkDisplayName"', page)
+    products = []
+    for i, b in enumerate(chunks[1:], 1):
+        link = re.search(r'href="([^"]+)"[^>]*>([\s\S]*?)</a>', b)
+        code = re.search(r'<strong>\s*(\d+)\s*</strong>', b)
+        if not link or not code:
+            continue
+        mfr = re.search(r'</strong>[\s\S]*?\|\s*([^<(]+?)(?:&nbsp;|\s)*\(', b)
+        uom = re.search(r'class="uom-opts[^"]*">\s*([A-Z0-9]+)', b)
+        imgs = re.findall(r'<img[^>]+src="(/Products/[^"]+)"', chunks[i - 1])
+        products.append({
+            **item("henryschein", code=code.group(1), name=strip_tags(link.group(2)),
+                   url=html.unescape(link.group(1)).split("?")[0],
+                   brand=strip_tags(mfr.group(1)) if mfr else "",
+                   image=HS_BASE + imgs[-1] if imgs else ""),
+            "_uom": uom.group(1) if uom else "",
+        })
+    return _hs_apply_prices(page, products, url)
 
 
 # ---------- register ----------
@@ -610,6 +655,7 @@ SITES = {
         "label": "Henry Schein", "search": henryschein_search,
         "logged_in": henryschein_logged_in,
         "login_url": "https://www.henryschein.be/be-nl/Profiles/Login.aspx",
+        "lists": henryschein_lists,
         "note": "Prijzen enkel na login",
     },
 }
