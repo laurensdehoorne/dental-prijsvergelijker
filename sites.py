@@ -72,6 +72,23 @@ SYNONYMS = {
 }
 
 
+def singular(query):
+    """'fuji ortho lc capsules' -> 'fuji ortho lc capsule' (None als er geen meervoud in zit).
+    Zelfde regels als stem() in static/index.html."""
+    def stem(w):
+        lw = w.lower()
+        if not lw.isalpha():
+            return w
+        if len(lw) >= 6 and lw.endswith("en"):
+            return w[:-2]
+        if len(lw) >= 4 and lw.endswith("s") and not lw.endswith(("ss", "us", "is")):
+            return w[:-1]
+        return w
+    words = query.split()
+    out = [stem(w) for w in words]
+    return " ".join(out) if out != words else None
+
+
 def translate(query):
     """'prophycare blue directa' -> 'prophycare blauw directa' (None als er niets te vertalen is)."""
     words = query.split()

@@ -29,8 +29,10 @@ pool = ThreadPoolExecutor(max_workers=8)
 def run_search(site, query):
     try:
         items = SITES[site]["search"](query)
-        alt = sites.translate(query)
-        if not items and alt:  # bv. 'blue' niets gevonden -> opnieuw met 'blauw'
+        # niets gevonden -> opnieuw met 'blauw' i.p.v. 'blue', of 'capsule' i.p.v. 'capsules'
+        for alt in (sites.translate(query), sites.singular(query)):
+            if items or not alt:
+                continue
             items = SITES[site]["search"](alt)
         return {"items": items, "error": None}
     except Exception as e:

@@ -595,7 +595,14 @@ function norm(t) {
 const tokens = t => norm(t).split(/[^a-z0-9.:]+/).map(x => x.replace(/^[.:]+|[.:]+$/g, "")).filter(Boolean);
 let SYN = {};  // Engels -> Nederlands, van de server (sites.SYNONYMS)
 fetch("/api/synonyms").then(r => r.json()).then(d => { SYN = d; if (results) render(); }).catch(() => {});
-const canon = w => SYN[w] || w;
+// enkelvoud/meervoud gelijkstellen: capsules -> capsule, tips -> tip, naalden -> naald
+function stem(w) {
+  if (!/^[a-z]+$/.test(w)) return w;                       // codes, maten, kleuren (a2) niet
+  if (w.length >= 6 && w.endsWith("en")) return w.slice(0, -2);
+  if (w.length >= 4 && w.endsWith("s") && !/(ss|us|is)$/.test(w)) return w.slice(0, -1);
+  return w;
+}
+const canon = w => stem(SYN[w] || w);
 function matchScore(qTok, it) {
   if (!qTok.length) return 1;
   qTok = qTok.map(canon);
@@ -611,7 +618,7 @@ function matchScore(qTok, it) {
 
 function allItems() {
   const qTok = tokens(lastQuery);
-  const words = filterText.split(/\s+/).filter(Boolean);
+  const words = filterText.split(/\s+/).filter(Boolean).map(stem);
   const out = [];
   for (const [site, r] of Object.entries(results || {})) {
     if (!isOn(site)) continue;
