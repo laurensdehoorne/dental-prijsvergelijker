@@ -1,0 +1,45 @@
+# Diagnose op een echte Windows-machine: bouwt de app, start hem en opent een
+# loginvenster zoals de knop 'Inloggen' dat doet. Handmatig starten ("Run workflow").
+name: Windows-test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pyinstaller
+      - run: pyinstaller --noconfirm --clean prijsvergelijker.spec
+      - name: App starten en loginvenster openen
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path dist/Prijsvergelijker/Prijsvergelijker.exe
+          $app = Start-Process $exe -PassThru
+          $ok = $false
+          foreach ($i in 1..30) {
+            Start-Sleep 2
+            try { Invoke-RestMethod http://localhost:8765/api/status | Out-Null; $ok = $true; break } catch {}
+          }
+          "server bereikbaar: $ok"
+          Invoke-RestMethod -Method Post http://localhost:8765/api/login/dentaldiscount | ConvertTo-Json
+          Start-Sleep 25
+          "--- processen"
+          Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'Prijsvergelijker|chrome|msedge|node' } |
+            ForEach-Object { "{0} {1}" -f $_.ProcessId, $_.CommandLine.Substring(0, [Math]::Min(220, $_.CommandLine.Length)) }
+          "--- open tabbladen via debugpoort"
+          Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'remote-debugging-port=(\d+)' } | ForEach-Object {
+            $port = [regex]::Match($_.CommandLine, 'remote-debugging-port=(\d+)').Groups[1].Value
+            try { (Invoke-RestMethod "http://127.0.0.1:$port/json") | ForEach-Object { "$($_.type) $($_.url)" } } catch { "poort $port: $($_.Exception.Message)" }
+          }
+          "--- status"
+          (Invoke-RestMethod http://localhost:8765/api/status).dentaldiscount | ConvertTo-Json
+          "--- log.txt"
+          Get-Content "$env:APPDATA\Prijsvergelijker\log.txt" -ErrorAction SilentlyContinue
+          "--- sessiebestand"
+          Get-ChildItem "$env:APPDATA\Prijsvergelijker\sessions" -ErrorAction SilentlyContinue
+          Get-Process Prijsvergelijker, chrome -ErrorAction SilentlyContinue | Stop-Process -Force
