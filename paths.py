@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Prijsvergelijker"
-VERSION = "1.0.9"
+VERSION = "1.0.10"
 FROZEN = getattr(sys, "frozen", False)
 SRC = Path(__file__).parent
 RES = Path(getattr(sys, "_MEIPASS", SRC))
@@ -44,6 +44,7 @@ SESSIONS = DATA / "sessions"
 PROFILES = DATA / "profiles"
 FAVORITES = DATA / "favorites.json"
 SETTINGS = DATA / "settings.json"
+LISTS = DATA / "lists.json"  # afnamelijsten/favorieten van de winkels (cache)
 
 
 def _migrate_from(old):

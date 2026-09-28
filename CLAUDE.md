@@ -15,8 +15,9 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
   Ordent (DD/Hofmeester/ADT): `ajax/products.php?page_type=ordered|wishlist` (per 48); Basiq: bewaarde
   mandjes + afnamelijst uit laatste 60 bestellingen (OCC-API); Denta: `/artikelgeschiedenis/`.
   Dental Addict (`module/regularbuys/regularbuys`) en Henry Schein (`Orders/ItemsFromHistory.aspx`)
-  nog niet: waren leeg op dit account, dus geen voorbeeld om te parsen. Server bewaart 30 min;
-  de UI laadt ze bij opstarten voor het label "eerder besteld" (match op site+artikelnr óf productlink).
+  nog niet: waren leeg op dit account, dus geen voorbeeld om te parsen. Bewaard in `lists.json`
+  (gegevensmap): meteen getoond, ouder dan 30 min = op de achtergrond vernieuwd (`lists_lock`: nooit
+  dubbel); mislukt een winkel, dan blijft zijn vorige lijst staan. De UI laadt ze bij opstarten voor het label "eerder besteld" (match op site+artikelnr óf productlink).
 - `carts.py` — winkelmandje toevoegen/uitlezen/verwijderen per winkel. **Nooit bestellen.**
 - `login.py` — start een *gewone* Chrome (anders Edge) met `--remote-debugging-port` en een
   eigen profiel per winkel; Playwright `connect_over_cdp` leest elke ~2 s cookies

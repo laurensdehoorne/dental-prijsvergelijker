@@ -3,6 +3,7 @@
 Start met ./start.command en open http://localhost:8765
 """
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -74,29 +75,77 @@ def read_carts():
     return {"carts": {s: f.result() for s, f in futures.items()}, **load_settings()}
 
 
-lists_cache = {"time": 0, "data": None}
+LISTS_MAX_AGE = 1800  # daarna op de achtergrond vernieuwen
+lists_cache = {"time": 0, "data": None, "refreshing": False}
+lists_lock = threading.Lock()  # nooit twee keer tegelijk alle winkels afgaan
+
+
+def _load_lists_file():
+    try:
+        saved = json.loads(paths.LISTS.read_text())
+        lists_cache.update(time=saved["time"], data=saved["sites"])
+    except (OSError, ValueError, KeyError):
+        pass
+
+
+def _fetch_lists():
+    """Alle winkels parallel (enkel waar je ingelogd bent). Lukt het bij een winkel niet
+    (fout, afgemeld), dan blijft de vorige lijst staan: nodig voor 'eerder besteld'."""
+    started = time.time()
+    with lists_lock:
+        if lists_cache["time"] >= started:  # net door een ander verzoek opgehaald
+            return
+
+        def one(site):
+            cfg = SITES[site]
+            if not cfg.get("lists"):
+                return {"lists": [], "error": None, "unsupported": True}
+            if not cfg["logged_in"]():
+                return {"lists": [], "error": None, "not_logged_in": True}
+            try:
+                return {"lists": cfg["lists"](), "error": None}
+            except Exception as e:
+                traceback.print_exc()
+                return {"lists": [], "error": f"{type(e).__name__}: {e}"}
+
+        futures = {s: pool.submit(one, s) for s in SITES}
+        old = lists_cache["data"] or {}
+        data = {}
+        for s, f in futures.items():
+            r = f.result()
+            if (r.get("error") or r.get("not_logged_in")) and old.get(s, {}).get("lists"):
+                r["lists"] = old[s]["lists"]
+            data[s] = r
+        now = time.time()
+        lists_cache.update(time=now, data=data)
+        tmp = paths.LISTS.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"time": now, "sites": data}))
+        os.chmod(tmp, 0o600)
+        tmp.replace(paths.LISTS)
+
+
+def _refresh_lists_background():
+    lists_cache["refreshing"] = True
+    try:
+        _fetch_lists()
+    except Exception:
+        traceback.print_exc()
+    finally:
+        lists_cache["refreshing"] = False
 
 
 def read_lists(fresh=False):
-    """Afnamelijsten/favorieten van alle winkels parallel (enkel waar je ingelogd bent).
-    Een half uur bewaard: de app laadt ze bij het opstarten voor het label 'eerder besteld'."""
-    if not fresh and lists_cache["data"] and time.time() - lists_cache["time"] < 1800:
-        return lists_cache["data"]
-    def one(site):
-        cfg = SITES[site]
-        if not cfg.get("lists"):
-            return {"lists": [], "error": None, "unsupported": True}
-        if not cfg["logged_in"]():
-            return {"lists": [], "error": None, "not_logged_in": True}
-        try:
-            return {"lists": cfg["lists"](), "error": None}
-        except Exception as e:
-            traceback.print_exc()
-            return {"lists": [], "error": f"{type(e).__name__}: {e}"}
-    futures = {s: pool.submit(one, s) for s in SITES}
-    data = {s: f.result() for s, f in futures.items()}
-    lists_cache.update(time=time.time(), data=data)
-    return data
+    """Meteen de bewaarde lijsten (ook na herstarten van de app); te oud = op de achtergrond
+    vernieuwen. fresh = nu opnieuw ophalen (knop Vernieuwen)."""
+    if lists_cache["data"] is None:
+        _load_lists_file()
+    if fresh or lists_cache["data"] is None:
+        _fetch_lists()
+    elif time.time() - lists_cache["time"] > LISTS_MAX_AGE and not lists_cache["refreshing"]:
+        lists_cache["refreshing"] = True
+        threading.Thread(target=_refresh_lists_background, daemon=True).start()
+    return {"time": lists_cache["time"], "refreshing": lists_cache["refreshing"],
+            "sites": lists_cache["data"]}
 
 
 def refresh_items(items):

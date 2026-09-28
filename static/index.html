@@ -896,7 +896,7 @@ document.getElementById("shipDlg").addEventListener("close", async () => {
 });
 
 // ---------- Winkellijsten: afnamelijsten en favorieten uit je account bij de winkels ----------
-let shopLists = null, slQuery = "", slShown = [];
+let shopLists = null, slQuery = "", slShown = [], listsTime = 0, listsRefreshing = false, listsTimer;
 // "eerder besteld": producten uit een afnamelijst/artikelhistoriek, op artikelnummer of productlink
 let orderedIdx = new Map();
 const cleanUrl = u => String(u || "").replace(/[?#].*$/, "").replace(/\/+$/, "").toLowerCase();
@@ -921,9 +921,15 @@ async function loadShopLists(fresh = true, quiet = false) {
     document.getElementById("slInfo").innerHTML = `<span class="spinner"></span>Lijsten ophalen bij alle winkels (kan tot 15 s duren)…`;
     document.getElementById("slBody").innerHTML = "";
   }
-  try { shopLists = await (await fetch("/api/lists" + (fresh ? "?fresh=1" : ""))).json(); }
+  try {
+    const d = await (await fetch("/api/lists" + (fresh ? "?fresh=1" : ""))).json();
+    shopLists = d.sites; listsTime = d.time; listsRefreshing = d.refreshing;
+  }
   catch (err) { if (!quiet) document.getElementById("slInfo").textContent = "Ophalen mislukt: " + err; return; }
   finally { btn.disabled = false; }
+  // bewaarde lijsten getoond; de server vernieuwt ze op de achtergrond: straks opnieuw kijken
+  clearTimeout(listsTimer);
+  if (listsRefreshing) listsTimer = setTimeout(() => loadShopLists(false, true), 15000);
   buildOrderedIdx();
   if (results) render();
   if (tab === "list") renderList();
@@ -969,9 +975,12 @@ function renderShopLists() {
           </tr>`; }).join("")}</tbody></table></details>`);
     }
   }
-  document.getElementById("slInfo").textContent = words.length
+  const t = new Date(listsTime * 1000), sameDay = t.toDateString() === new Date().toDateString();
+  const when = (sameDay ? "" : t.toLocaleDateString("nl-BE") + " ") + t.toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" });
+  document.getElementById("slInfo").textContent = (words.length
     ? `${found} van ${total} producten gevonden`
-    : `${total} producten · 🔍 vergelijk zoekt het product bij alle winkels`;
+    : `${total} producten · 🔍 vergelijk zoekt het product bij alle winkels`) +
+    ` · bijgewerkt ${when}${listsRefreshing ? " (wordt vernieuwd…)" : ""}`;
   const notes = [
     notIn.length && `Niet ingelogd: ${notIn.join(" · ")}`,
     empty.length && `Leeg: ${empty.join(" · ")}`,
