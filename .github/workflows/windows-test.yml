@@ -34,7 +34,7 @@ jobs:
           "--- open tabbladen via debugpoort"
           Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'remote-debugging-port=(\d+)' } | ForEach-Object {
             $port = [regex]::Match($_.CommandLine, 'remote-debugging-port=(\d+)').Groups[1].Value
-            try { (Invoke-RestMethod "http://127.0.0.1:$port/json") | ForEach-Object { "$($_.type) $($_.url)" } } catch { "poort $port: $($_.Exception.Message)" }
+            try { (Invoke-RestMethod "http://127.0.0.1:$port/json") | ForEach-Object { "$($_.type) $($_.url)" } } catch { "poort ${port}: $($_.Exception.Message)" }
           }
           "--- status"
           (Invoke-RestMethod http://localhost:8765/api/status).dentaldiscount | ConvertTo-Json
