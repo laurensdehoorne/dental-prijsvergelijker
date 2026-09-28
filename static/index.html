@@ -165,7 +165,14 @@
       <button data-tab="search" class="on">Zoekresultaten</button>
       <button data-tab="list">★ Mijn lijst <span id="favCount"></span></button>
     </div>
-    <div id="listView" hidden></div>
+    <div id="listView" hidden>
+      <div class="toolbar" id="listBar">
+        <input type="search" class="filter" id="listQ" placeholder="Zoek in mijn lijst (product, merk, winkel, groep…)" style="width:320px">
+        <span id="listInfo"></span>
+        <button class="primary" id="refreshAll">↻ Prijzen vernieuwen</button>
+      </div>
+      <div id="listBody"></div>
+    </div>
     <div id="searchView">
     <div id="toolbar" class="toolbar" hidden>
       <span id="summary"></span>
@@ -410,26 +417,39 @@ function setTab(t) {
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
 // Mijn lijst
+let listQuery = "";
 function renderList() {
-  const el = document.getElementById("listView");
+  const el = document.getElementById("listBody");
+  document.getElementById("listBar").hidden = !favs.groups.length;
   if (!favs.groups.length) {
     el.innerHTML = `<div class="msg">Je lijst is nog leeg.<br>Zoek een product en klik op ☆ om het hier te bewaren.
       Zet hetzelfde product van verschillende winkels in dezelfde groep om ze te vergelijken.</div>`;
     return;
   }
   const withPP = it => ({ ...it, pp: it.price != null && it.pieces ? it.price / it.pieces : null });
-  el.innerHTML = `
-    <div class="toolbar">
-      <span>${favs.groups.length} ${favs.groups.length === 1 ? "groep" : "groepen"} · datum rechts = laatst bijgewerkt</span>
-      <button class="primary" id="refreshAll">↻ Prijzen vernieuwen</button>
-    </div>` + favs.groups.map((g, gi) => {
-      const items = g.items.map(withPP).sort((a, b) => (a.pp ?? a.price ?? 1e9) - (b.pp ?? b.price ?? 1e9));
+  // zoeken: past de groepsnaam, dan de hele groep; anders enkel de passende producten
+  const words = norm(listQuery).split(/\s+/).filter(Boolean);
+  const hit = text => words.every(w => norm(text).includes(w));
+  const itemText = it => [it.name, it.brand, it.pack, it.code, shops[it.site]?.label || it.site].join(" ");
+  const shown = favs.groups.map((g, gi) => ({ g, gi,
+      items: !words.length || hit(g.name) ? g.items : g.items.filter(it => hit(g.name + " " + itemText(it))) }))
+    .filter(x => x.items.length);
+  const nItems = shown.reduce((a, x) => a + x.items.length, 0);
+  document.getElementById("listInfo").textContent = words.length
+    ? `${nItems} van ${favs.groups.reduce((a, g) => a + g.items.length, 0)} producten gevonden`
+    : `${favs.groups.length} ${favs.groups.length === 1 ? "groep" : "groepen"} · datum rechts = laatst bijgewerkt`;
+  if (!shown.length) {
+    el.innerHTML = `<div class="msg">Niets gevonden voor "${esc(listQuery)}" in je lijst.</div>`;
+    return;
+  }
+  el.innerHTML = shown.map(({ g, gi, items: gItems }) => {
+      const items = gItems.map(withPP).sort((a, b) => (a.pp ?? a.price ?? 1e9) - (b.pp ?? b.price ?? 1e9));
       const cmp = items.filter(i => !i.missing && i.price != null);
       const key = i => i.pp ?? i.price;
       const best = cmp.length ? Math.min(...cmp.map(key)) : null;
       const cheapest = cmp.find(i => key(i) === best);
       return `<div class="group">
-        <h2>${esc(g.name)} <span class="sub">${items.length} product${items.length > 1 ? "en" : ""}</span>
+        <h2>${esc(g.name)} <span class="sub">${items.length}${items.length < g.items.length ? " van " + g.items.length : ""} product${g.items.length > 1 ? "en" : ""}</span>
           <span class="acts">
             ${cheapest ? `<a class="btnlink" href="${esc(cheapest.url)}" target="_blank" style="padding:4px 10px">Open goedkoopste</a>` : ""}
             <button data-research="${gi}">Zoek opnieuw</button>
@@ -442,7 +462,7 @@ function renderList() {
             <td style="width:30px"><button class="star on" data-unfav="${esc(favKey(it))}" title="Van mijn lijst halen">★</button></td>
             <td class="hide-sm" style="width:56px">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}</td>
             <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
-              <div class="code">${esc(it.pack)}${it.pack && it.code ? " · " : ""}${it.code ? "art. " + esc(it.code) : ""}
+              <div class="code">${it.brand ? esc(it.brand) + " · " : ""}${esc(it.pack)}${it.pack && it.code ? " · " : ""}${it.code ? "art. " + esc(it.code) : ""}
               ${it.missing ? ` · <span class="gone">niet meer gevonden bij laatste vernieuwing</span>` : ""}</div></td>
             <td><span class="tag"><span class="dot" style="background:${COLORS[it.site]}"></span>${esc(shops[it.site]?.label || it.site)}</span></td>
             <td class="num">${priceCell(it)}<div>${diff}</div></td>
@@ -452,6 +472,7 @@ function renderList() {
       </div>`;
     }).join("");
 }
+document.getElementById("listQ").addEventListener("input", e => { listQuery = e.target.value; renderList(); });
 document.getElementById("listView").addEventListener("click", async e => {
   const d = e.target.dataset;
   if (d.unfav) { removeFav(d.unfav); renderList(); }
@@ -473,10 +494,15 @@ async function refreshAll(btn) {
       if (!fresh) { it.missing = true; return; }
       if (fresh.price != null && it.price != null && fresh.price !== it.price) it.prev_price = it.price;
       Object.assign(it, { price: fresh.price, old_price: fresh.old_price, volume_price: fresh.volume_price,
-                          url: fresh.url, image: fresh.image || it.image, missing: false, updated: today() });
+                          url: fresh.url, image: fresh.image || it.image, brand: fresh.brand || it.brand || "",
+                          missing: false, updated: today() });
     });
     await saveFavs();
-  } finally { renderList(); }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "↻ Prijzen vernieuwen";
+    renderList();
+  }
 }
 
 const op = document.getElementById("onlyPriced");
