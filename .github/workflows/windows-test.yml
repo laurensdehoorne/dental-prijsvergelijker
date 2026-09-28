@@ -26,7 +26,7 @@ jobs:
             try { Invoke-RestMethod http://localhost:8765/api/status | Out-Null; $ok = $true; break } catch {}
           }
           "server bereikbaar: $ok"
-          Invoke-RestMethod -Method Post http://localhost:8765/api/login/dentaldiscount | ConvertTo-Json
+          Invoke-RestMethod -Method Post http://localhost:8765/api/login/basiq | ConvertTo-Json
           Start-Sleep 25
           "--- processen"
           Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'Prijsvergelijker|chrome|msedge|node' } |
@@ -37,7 +37,7 @@ jobs:
             try { (Invoke-RestMethod "http://127.0.0.1:$port/json") | ForEach-Object { "$($_.type) $($_.url)" } } catch { "poort ${port}: $($_.Exception.Message)" }
           }
           "--- status"
-          (Invoke-RestMethod http://localhost:8765/api/status).dentaldiscount | ConvertTo-Json
+          (Invoke-RestMethod http://localhost:8765/api/status).basiq | ConvertTo-Json
           "--- log.txt"
           Get-Content "$env:APPDATA\Prijsvergelijker\log.txt" -ErrorAction SilentlyContinue
           "--- sessiebestand"
