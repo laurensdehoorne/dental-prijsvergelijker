@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import threading
+import time
 import traceback
 import urllib.parse
 import webbrowser
@@ -73,6 +74,31 @@ def read_carts():
     return {"carts": {s: f.result() for s, f in futures.items()}, **load_settings()}
 
 
+lists_cache = {"time": 0, "data": None}
+
+
+def read_lists(fresh=False):
+    """Afnamelijsten/favorieten van alle winkels parallel (enkel waar je ingelogd bent).
+    Een half uur bewaard: de app laadt ze bij het opstarten voor het label 'eerder besteld'."""
+    if not fresh and lists_cache["data"] and time.time() - lists_cache["time"] < 1800:
+        return lists_cache["data"]
+    def one(site):
+        cfg = SITES[site]
+        if not cfg.get("lists"):
+            return {"lists": [], "error": None, "unsupported": True}
+        if not cfg["logged_in"]():
+            return {"lists": [], "error": None, "not_logged_in": True}
+        try:
+            return {"lists": cfg["lists"](), "error": None}
+        except Exception as e:
+            traceback.print_exc()
+            return {"lists": [], "error": f"{type(e).__name__}: {e}"}
+    futures = {s: pool.submit(one, s) for s in SITES}
+    data = {s: f.result() for s, f in futures.items()}
+    lists_cache.update(time=time.time(), data=data)
+    return data
+
+
 def refresh_items(items):
     """Actuele prijzen voor een lijst bewaarde producten; per winkel parallel."""
     by_site = {}
@@ -133,6 +159,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({s: f.result() for s, f in futures.items()})
         elif url.path == "/api/status":
             self.send_json(status())
+        elif url.path == "/api/lists":
+            self.send_json(read_lists(fresh="fresh" in urllib.parse.parse_qs(url.query)))
         elif url.path == "/api/carts":
             self.send_json(read_carts())
         elif url.path == "/api/settings":

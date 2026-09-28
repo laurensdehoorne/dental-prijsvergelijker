@@ -147,6 +147,13 @@
   .group h2 .acts { margin-left: auto; display: flex; gap: 6px; }
   .group h2 .acts button, .group h2 .acts a { font-size: 12px; padding: 4px 10px; font-weight: 400; }
   .group table { border: 0; border-radius: 0; }
+  .group > summary { list-style: none; cursor: pointer; }
+  .group > summary::-webkit-details-marker { display: none; }
+  .group > summary h2::before { content: "▸"; color: var(--muted); font-size: 12px; }
+  .group[open] > summary h2::before { content: "▾"; }
+  .group:not([open]) > summary h2 { border-bottom: 0; }
+  .badge { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 11px;
+           font-weight: 600; white-space: nowrap; vertical-align: 1px; background: var(--good-bg); color: var(--good); }
   .btnlink { border: 1px solid var(--line); border-radius: 8px; color: var(--text); text-decoration: none; }
   .up { color: var(--bad); font-size: 12px; } .down { color: var(--good); font-size: 12px; }
   .gone { color: var(--bad); font-size: 12px; }
@@ -184,6 +191,15 @@
       <button data-tab="search" class="on">Zoekresultaten</button>
       <button data-tab="list">★ Mijn lijst <span id="favCount"></span></button>
       <button data-tab="carts">🛒 Mandjes <span id="cartCount"></span></button>
+      <button data-tab="shoplists">📋 Winkellijsten</button>
+    </div>
+    <div id="shopListView" hidden>
+      <div class="toolbar">
+        <input type="search" class="filter" id="slQ" placeholder="Zoek in afnamelijsten en favorieten…" style="width:320px">
+        <span id="slInfo"></span>
+        <button class="primary" id="slReload">↻ Vernieuwen</button>
+      </div>
+      <div id="slBody"></div>
     </div>
     <div id="cartView" hidden>
       <div class="toolbar">
@@ -445,12 +461,12 @@ function removeFav(key) {
 }
 
 let pendingFav = null;
-function openFavDialog(it) {
+function openFavDialog(it, group = lastQuery) {
   pendingFav = it;
   document.getElementById("favWhat").textContent = `${shops[it.site]?.label || it.site}: ${it.name}`;
   document.getElementById("groupNames").innerHTML = favs.groups.map(g => `<option value="${esc(g.name)}">`).join("");
   const inp = document.getElementById("favGroup");
-  inp.value = lastQuery;
+  inp.value = group;
   document.getElementById("favDlg").showModal();
   inp.select();
 }
@@ -464,6 +480,7 @@ document.getElementById("favDlg").addEventListener("close", () => {
   g.items.push({ ...item, updated: today() });
   pendingFav = null;
   saveFavs(); render();
+  if (tab === "shoplists") renderShopLists();
 });
 
 // tabbladen
@@ -473,9 +490,11 @@ function setTab(t) {
   document.getElementById("searchView").hidden = t !== "search";
   document.getElementById("listView").hidden = t !== "list";
   document.getElementById("cartView").hidden = t !== "carts";
+  document.getElementById("shopListView").hidden = t !== "shoplists";
   document.body.classList.toggle("wide", t === "search" && view === "cols" && !!results);
   if (t === "list") renderList();
   if (t === "carts") loadCarts();
+  if (t === "shoplists") shopLists ? renderShopLists() : loadShopLists(false);
 }
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
@@ -525,7 +544,7 @@ function renderList() {
             <td style="width:30px"><button class="star on" data-unfav="${esc(favKey(it))}" title="Van mijn lijst halen">★</button></td>
             <td style="width:34px">${cartBtn("fav", favKey(it))}</td>
             <td class="hide-sm" style="width:56px">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}</td>
-            <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
+            <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>${orderedBadge(it)}
               <div class="code">${it.brand ? esc(it.brand) + " · " : ""}${esc(it.pack)}${it.pack && it.code ? " · " : ""}${it.code ? "art. " + esc(it.code) : ""}
               ${it.missing ? ` · <span class="gone">niet meer gevonden bij laatste vernieuwing</span>` : ""}</div></td>
             <td><span class="tag"><span class="dot" style="background:${COLORS[it.site]}"></span>${esc(shops[it.site]?.label || it.site)}</span></td>
@@ -680,7 +699,7 @@ function render() {
                 ${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}
                 ${starBtn(it, i)}
               </div>
-              <div class="n"><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
+              <div class="n"><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>${orderedBadge(it)}
                 <div class="line2"><span class="code">${it.brand ? esc(it.brand) + (it.pack ? " · " : "") : ""}${esc(it.pack)}</span>
                   <span class="p">${priceCell(it)}${it.pp != null ? `<small class="pp">${eurPP(it.pp)}/st</small>` : ""}
                     <span style="display:block;margin-top:3px">${cartBtn("shown", i)}</span></span></div>
@@ -717,7 +736,7 @@ function render() {
           <td style="width:30px">${starBtn(it, i)}</td>
           <td style="width:34px">${cartBtn("shown", i)}</td>
           <td class="hide-sm">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}</td>
-          <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
+          <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>${orderedBadge(it)}
               <div class="code">${it.brand ? esc(it.brand) + " · " : ""}${esc(it.pack)}${it.pack && it.code ? " · " : ""}${it.code ? "art. " + esc(it.code) : ""}</div></td>
           <td><span class="tag"><span class="dot" style="background:${COLORS[it.site]}"></span>${esc(shops[it.site]?.label || it.site)}</span></td>
           <td class="num">${priceCell(it)}</td>
@@ -876,8 +895,107 @@ document.getElementById("shipDlg").addEventListener("close", async () => {
   toast("Verzendvoorwaarden bewaard.");
 });
 
+// ---------- Winkellijsten: afnamelijsten en favorieten uit je account bij de winkels ----------
+let shopLists = null, slQuery = "", slShown = [];
+// "eerder besteld": producten uit een afnamelijst/artikelhistoriek, op artikelnummer of productlink
+let orderedIdx = new Map();
+const cleanUrl = u => String(u || "").replace(/[?#].*$/, "").replace(/\/+$/, "").toLowerCase();
+const orderedKeys = it => [it.code && `${it.site}|c|${it.code}`, it.url && `${it.site}|u|${cleanUrl(it.url)}`].filter(Boolean);
+function buildOrderedIdx() {
+  orderedIdx = new Map();
+  for (const [site, r] of Object.entries(shopLists || {}))
+    for (const l of r.lists || []) if (l.ordered)
+      for (const it of l.items) for (const k of orderedKeys({ ...it, site })) orderedIdx.set(k, it.last || "");
+}
+function orderedBadge(it) {
+  for (const k of orderedKeys(it)) if (orderedIdx.has(k)) {
+    const d = orderedIdx.get(k);
+    return `<span class="badge" title="Staat in je afnamelijst/artikelhistoriek bij deze winkel">eerder besteld${d ? " · " + longDate(d) : ""}</span>`;
+  }
+  return "";
+}
+async function loadShopLists(fresh = true, quiet = false) {
+  const btn = document.getElementById("slReload");
+  btn.disabled = true;
+  if (!quiet) {
+    document.getElementById("slInfo").innerHTML = `<span class="spinner"></span>Lijsten ophalen bij alle winkels (kan tot 15 s duren)…`;
+    document.getElementById("slBody").innerHTML = "";
+  }
+  try { shopLists = await (await fetch("/api/lists" + (fresh ? "?fresh=1" : ""))).json(); }
+  catch (err) { if (!quiet) document.getElementById("slInfo").textContent = "Ophalen mislukt: " + err; return; }
+  finally { btn.disabled = false; }
+  buildOrderedIdx();
+  if (results) render();
+  if (tab === "list") renderList();
+  if (tab === "shoplists") renderShopLists();
+}
+const longDate = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "";
+function renderShopLists() {
+  if (!shopLists) return;
+  const words = norm(slQuery).split(/\s+/).filter(Boolean).map(stem);
+  const hit = it => words.every(w => norm([it.name, it.brand, it.pack, it.code].join(" ")).includes(w));
+  const fi = favIndex();
+  const notIn = [], none = [], empty = [], errors = [];
+  let total = 0, found = 0;
+  slShown = [];
+  const cards = [];
+  for (const [site, r] of Object.entries(shopLists)) {
+    const label = shops[site]?.label || site;
+    if (r.unsupported) { none.push(label); continue; }
+    if (r.not_logged_in) { notIn.push(label); continue; }
+    if (r.error) { errors.push(`<div class="err">${esc(label)}: ${esc(r.error)}</div>`); continue; }
+    for (const l of r.lists) {
+      total += l.items.length;
+      if (!l.items.length) { empty.push(`${label} · ${l.name}`); continue; }
+      const items = l.items.filter(hit).map(it => ({ ...it, pp: it.price != null && it.pieces ? it.price / it.pieces : null }));
+      found += items.length;
+      if (!items.length) continue;
+      const open = words.length || l.items.length <= 12 ? "open" : "";
+      cards.push(`<details class="group" ${open}><summary><h2><span class="dot" style="background:${COLORS[site]}"></span>${esc(label)}
+          <span class="sub">${esc(l.name)} · ${items.length}${items.length < l.items.length ? " van " + l.items.length : ""} producten</span></h2></summary>
+        <table><tbody>${items.map(it => {
+          slShown.push(it); const i = slShown.length - 1;
+          const on = fi.has(favKey(it));
+          const meta = [it.last ? "laatst gekocht " + longDate(it.last) : "", it.times > 1 ? it.times + "× besteld" : ""].filter(Boolean).join(" · ");
+          return `<tr>
+            <td style="width:30px"><button class="star ${on ? "on" : ""}" data-slstar="${i}" title="${on ? "Van mijn lijst halen" : "Op mijn lijst zetten"}">${on ? "★" : "☆"}</button></td>
+            <td style="width:34px"><button class="cartbtn" data-slcart="${i}" title="In winkelmandje leggen">🛒</button></td>
+            <td class="hide-sm" style="width:56px">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ""}</td>
+            <td><a href="${esc(it.url)}" target="_blank">${esc(it.name)}</a>
+              <div class="code">${[it.brand, it.pack, it.code ? "art. " + it.code : "", meta].filter(Boolean).map(esc).join(" · ")}</div></td>
+            <td class="num">${it.price != null ? priceCell(it) : `<span class="none">—</span>`}</td>
+            <td class="num pp hide-sm">${it.pp != null ? eurPP(it.pp) + "/st" : ""}</td>
+            <td class="num" style="width:110px"><button class="cartbtn" data-find="${esc(it.name)}" title="Zoek dit product bij alle winkels">🔍 vergelijk</button></td>
+          </tr>`; }).join("")}</tbody></table></details>`);
+    }
+  }
+  document.getElementById("slInfo").textContent = words.length
+    ? `${found} van ${total} producten gevonden`
+    : `${total} producten · 🔍 vergelijk zoekt het product bij alle winkels`;
+  const notes = [
+    notIn.length && `Niet ingelogd: ${notIn.join(" · ")}`,
+    empty.length && `Leeg: ${empty.join(" · ")}`,
+    none.length && `Nog niet ondersteund: ${none.join(" · ")}`,
+  ].filter(Boolean).map(t => `<p class="code" style="margin:4px 2px">${esc(t)}</p>`).join("");
+  document.getElementById("slBody").innerHTML = errors.join("") +
+    (cards.length ? cards.join("") : `<div class="msg">${words.length ? `Niets gevonden voor "${esc(slQuery)}".` : "Geen producten in je lijsten gevonden."}</div>`) + notes;
+}
+document.getElementById("slQ").addEventListener("input", e => { slQuery = e.target.value; renderShopLists(); });
+document.getElementById("slReload").addEventListener("click", () => loadShopLists(true));
+document.getElementById("slBody").addEventListener("click", e => {
+  const d = e.target.dataset;
+  if (d.find) return runSearch(d.find);
+  if (d.slcart != null) return openCartDialog(slShown[d.slcart]);
+  if (d.slstar != null) {
+    const it = slShown[d.slstar];
+    if (favIndex().has(favKey(it))) { removeFav(favKey(it)); renderShopLists(); }
+    else { const { last, times, ...rest } = it; openFavDialog(rest, it.name); }
+  }
+});
+
 loadStatus();
 loadFavs();
+loadShopLists(false, true);  // op de achtergrond, voor het label "eerder besteld"
 </script>
 </body>
 </html>

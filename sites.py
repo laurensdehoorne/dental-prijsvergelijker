@@ -9,6 +9,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from http.cookiejar import CookieJar
 
 from paths import SESSIONS
@@ -174,7 +175,26 @@ class OrdentShop:
             "lang": self.lang, "page": 1, "page_mode": "search", "page_data": "",
             "page_query": query, "page_srt": "default", "page_view": "list",
         })
-        body = self._fetch(self.base + "ajax/products.php?" + params)
+        return self._parse(self._fetch(self.base + "ajax/products.php?" + params))
+
+    def lists(self):
+        """Afnamelijst en favorieten van je account (per 48 geladen, zoals de webshop zelf)."""
+        out = []
+        for name, kind in (("Afnamelijst", "ordered"), ("Favorieten", "wishlist")):
+            items = []
+            for page in range(1, 30):
+                params = urllib.parse.urlencode({
+                    "lang": self.lang, "page": page, "page_type": kind, "page_view": "list",
+                    "page_srt": "default", "page_cat": "all",
+                })
+                found = self._parse(self._fetch(self.base + "ajax/products.php?" + params))
+                items += found
+                if len(found) < 48:
+                    break
+            out.append({"name": name, "items": items, "ordered": kind == "ordered"})
+        return out
+
+    def _parse(self, body):
         items = []
         for b in re.split(r'<div class="product-wrap', body)[1:]:
             name = re.search(r'<div class="product-name">\s*<a[^>]*>([\s\S]*?)</a>', b)
@@ -242,9 +262,29 @@ def basiq_logged_in():
         return False
 
 
+def _basiq_product(p, **extra):
+    name = strip_tags(p.get("name", ""))
+    brand = (p.get("brand") or {}).get("name", "")
+    img = next((i.get("url") for i in p.get("images", []) if i.get("url")), "")
+    if img.startswith("/"):
+        img = "https://prd-api.basiqdental.com" + img
+    it = item(
+        "basiq", code=p.get("code", ""),
+        name=name if brand.lower() in name.lower() else f"{brand} {name}".strip(),
+        pack=p.get("packingContents") or "",
+        price=(p.get("price") or {}).get("value"),
+        old_price=(p.get("regularPrice") or {}).get("value"),
+        url=BQ_SHOP + p.get("url", ""), image=img,
+    )
+    it.update(extra)
+    return it
+
+
+BQ_PRODUCT_FIELDS = "code,name,brand(DEFAULT),packingContents,price(FULL),regularPrice(FULL),images(DEFAULT),url"
+
+
 def basiq_search(query):
-    fields = ("products(code,name,brand(DEFAULT),packingContents,price(FULL),"
-              "regularPrice(FULL),images(DEFAULT),url),pagination(DEFAULT)")
+    fields = f"products({BQ_PRODUCT_FIELDS}),pagination(DEFAULT)"
     params = urllib.parse.urlencode({
         "fields": fields, "query": query, "pageSize": 48, "lang": "nl_BE", "curr": "EUR",
     })
@@ -259,23 +299,51 @@ def basiq_search(query):
             raise
         headers.pop("Authorization")  # token verlopen: publieke prijzen
         _, body = http_get(BQ_API + "products/search?" + params, headers)
-    items = []
-    for p in json.loads(body).get("products", []):
-        name = strip_tags(p.get("name", ""))
-        brand = (p.get("brand") or {}).get("name", "")
-        img = next((i.get("url") for i in p.get("images", []) if i.get("url")), "")
-        if img.startswith("/"):
-            img = "https://prd-api.basiqdental.com" + img
-        items.append(item(
-            "basiq", code=p.get("code", ""),
-            name=name if brand.lower() in name.lower() else f"{brand} {name}".strip(),
-            pack=p.get("packingContents") or "",
-            price=(p.get("price") or {}).get("value"),
-            old_price=(p.get("regularPrice") or {}).get("value"),
-            url=BQ_SHOP + p.get("url", ""), image=img,
-        ))
-    return items
+    return [_basiq_product(p) for p in json.loads(body).get("products", [])]
 
+
+
+def basiq_lists(max_orders=60):
+    """Favorieten (bewaarde mandjes) en een afnamelijst uit je bestellingen, met actuele prijzen."""
+    token = basiq_token()
+    if not token:
+        return []
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    get = lambda path: json.loads(http_get(BQ_API + path, headers)[1])
+    out = []
+
+    fav = []
+    for c in get("users/current/carts?savedCartsOnly=true&pageSize=20&fields=carts(code,totalItems)").get("carts", []):
+        if c.get("totalItems"):
+            cart = get(f"users/current/carts/{c['code']}?fields=entries(product({BQ_PRODUCT_FIELDS}))")
+            fav += [_basiq_product(e["product"]) for e in cart.get("entries", []) if e.get("product")]
+    out.append({"name": "Favorieten", "items": fav, "ordered": False})
+
+    orders = get(f"users/current/orders?pageSize={max_orders}&fields=orders(code,placed)").get("orders", [])
+    with ThreadPoolExecutor(8) as ex:
+        details = list(ex.map(lambda o: get(
+            f"users/current/orders/{o['code']}?fields=entries(product(code))"), orders))
+        seen = {}  # code -> [laatst besteld, aantal keer]
+        for o, d in zip(orders, details):
+            for e in d.get("entries", []):
+                code = (e.get("product") or {}).get("code")
+                if code:
+                    last, n = seen.get(code, ("", 0))
+                    seen[code] = (max(last, o.get("placed", "")[:10]), n + 1)
+        prods = list(ex.map(lambda code: _try(lambda: get(
+            f"products/{code}?fields={BQ_PRODUCT_FIELDS}&lang=nl_BE&curr=EUR")), seen))
+    ordered = [_basiq_product(p, last=seen[p["code"]][0], times=seen[p["code"]][1])
+               for p in prods if p and p.get("code") in seen]
+    ordered.sort(key=lambda x: x["last"], reverse=True)
+    out.insert(0, {"name": f"Afnamelijst (laatste {len(orders)} bestellingen)", "items": ordered, "ordered": True})
+    return out
+
+
+def _try(f):
+    try:
+        return f()
+    except Exception:
+        return None
 
 # ---------- Dental Addict (PrestaShop 1.6) ----------
 
@@ -374,6 +442,26 @@ def denta_search(query):
         ))
     return items
 
+
+
+def denta_lists():
+    """Artikelhistoriek: alles wat je ooit kocht, met de datum van de laatste aankoop (zonder prijs)."""
+    body = _denta_fetch(DENTA_BASE + "/artikelgeschiedenis/")
+    items = []
+    for b in re.split(r'<tr>\s*<td class="pro-thumbnail', body)[1:]:
+        name = re.search(r'<p class="h4"><a href="([^"]+)">([\s\S]*?)</a>', b)
+        if not name:
+            continue
+        code = re.search(r'data-val="([^"]*)"', b)
+        img = re.search(r'<img[^>]+src="([^"]+)"', b)
+        last = re.search(r'tableCellDateLastBought">\s*(\d\d)/(\d\d)/(\d{4})', b)
+        it = item("denta", code=code.group(1) if code else "", name=strip_tags(name.group(2)),
+                  url=DENTA_BASE + name.group(1), image=img.group(1) if img else "")
+        if last:
+            it["last"] = f"{last.group(3)}-{last.group(2)}-{last.group(1)}"
+        items.append(it)
+    items.sort(key=lambda x: x.get("last", ""), reverse=True)
+    return [{"name": "Artikelhistoriek", "items": items, "ordered": True}]
 
 # ---------- Henry Schein (ASP.NET WebForms) ----------
 
@@ -475,11 +563,13 @@ SITES = {
         "label": "Dental Discount", "search": dentaldiscount.search,
         "logged_in": dentaldiscount.logged_in,
         "login_url": "https://www.dentaldiscount.com/nl-be/login",
+        "lists": dentaldiscount.lists,
         "note": "Toont ook staffelprijzen",
     },
     "basiq": {
         "label": "Basiq Dental", "search": basiq_search, "logged_in": basiq_logged_in,
         "login_url": "https://www.basiqdental.be/nl_BE/login",
+        "lists": basiq_lists,
         "note": "Publieke prijzen; login voor klantprijzen",
     },
     "dentaladdict": {
@@ -491,16 +581,19 @@ SITES = {
     "hofmeester": {
         "label": "Hofmeester", "search": hofmeester.search, "logged_in": hofmeester.logged_in,
         "login_url": "https://www.hofmeester.nl/login",
+        "lists": hofmeester.lists,
         "note": "Prijzen enkel na login",
     },
     "adt": {
         "label": "ADT", "search": adt.search, "logged_in": adt.logged_in,
         "login_url": "https://www.adt.be/login",
+        "lists": adt.lists,
         "note": "Prijzen enkel na login",
     },
     "denta": {
         "label": "Denta", "search": denta_search, "logged_in": denta_logged_in,
         "login_url": "https://www.denta.be/aanmelden/",
+        "lists": denta_lists,
         "note": "Prijzen enkel na login",
     },
     "henryschein": {
