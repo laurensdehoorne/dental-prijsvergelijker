@@ -44,6 +44,12 @@ Bewijs: `Prijsvergelijker.exe --login basiq` rechtstreeks → werkt (11 cookies)
 - Regressietest: stap "Regressie - login met __COMPAT_LAYER en Edge" in
   `.github/workflows/windows-test.yml` (faalt als er 0 cookies bewaard worden).
 
+**v1.0.4 — niet meer afgemeld door het loginvenster te openen:** tijdens het inloggen schrijft
+`login.py` naar `sessions/<site>.pending.json`; `finalize()` (bij sluiten, ook via watchdog)
+neemt die enkel in gebruik als je ermee ingelogd bent, of als de oude sessie ook niet meer
+werkte. Aanleiding: Henry Schein's logincookie `MSCSAuth` is een sessiecookie die Chrome bij
+herstart kwijt is — het venster openen overschreef een geldige sessie.
+
 Eerder (v1.0.2): `AllowSetForegroundWindow` + `page.bring_to_front()` (venster vooraan),
 cookie-fallback `Network.getAllCookies`, logregels `[login <site>] N cookies bewaard`.
 Let op: GitHub-runners krijgen bij Dental Discount een Cloudflare-controle → 0 cookies;

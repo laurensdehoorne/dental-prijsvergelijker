@@ -130,7 +130,48 @@ def alive(chrome, port):
     return chrome.poll() is None or open_tabs(port) >= 0
 
 
-def watchdog(chrome, port):
+_final_lock = threading.Lock()
+_finalized = []
+
+
+def finalize(site):
+    """Na het loginvenster: de nieuwe sessie (<site>.pending.json) enkel in gebruik nemen als
+    je daarmee ingelogd bent, of als de oude sessie ook niet meer werkte. Zo raak je niet
+    afgemeld door het venster te openen terwijl je al ingelogd was (bv. Henry Schein: de
+    logincookie is tijdelijk en verdwijnt als Chrome herstart)."""
+    with _final_lock:
+        if _finalized:
+            return
+        _finalized.append(True)
+        cur, pend, old = (SESSIONS / f"{site}{ext}" for ext in (".json", ".pending.json", ".old.json"))
+        if not pend.exists():
+            return
+        check = SITES[site]["logged_in"]
+        if cur.exists():
+            cur.replace(old)
+        pend.replace(cur)
+        try:
+            new_ok = check()
+        except Exception:
+            new_ok = True  # geen internet o.i.d.: niet zomaar de nieuwe sessie weggooien
+        if not new_ok and old.exists():
+            cur.replace(pend)
+            old.replace(cur)
+            try:
+                old_ok = check()
+            except Exception:
+                old_ok = False
+            if old_ok:
+                pend.unlink(missing_ok=True)
+                print(f"[login {site}] niet (opnieuw) ingelogd: vorige sessie behouden", flush=True)
+                return
+            cur.replace(old)
+            pend.replace(cur)
+        old.unlink(missing_ok=True)
+        print(f"[login {site}] sessie in gebruik genomen (ingelogd: {new_ok})", flush=True)
+
+
+def watchdog(chrome, port, site):
     """Vangnet naast de hoofdlus: als het venster dicht is (of nooit opende), alles
     afsluiten, ook als Playwright ergens blijft wachten op een gesloten pagina."""
     started, seen = time.time(), False
@@ -142,6 +183,7 @@ def watchdog(chrome, port):
             time.sleep(3)  # hoofdlus de kans geven om zelf netjes te stoppen
             if chrome.poll() is None:
                 chrome.terminate()
+            finalize(site)
             os._exit(0)
 
 
@@ -159,7 +201,7 @@ def main(site):
         faulthandler.register(signal.SIGUSR1)
     SESSIONS.mkdir(exist_ok=True)
     PROFILES.mkdir(exist_ok=True)
-    out = SESSIONS / f"{site}.json"
+    out = SESSIONS / f"{site}.pending.json"  # pas bij sluiten in gebruik (zie finalize)
     port = free_port()
 
     chrome = subprocess.Popen([
@@ -171,7 +213,7 @@ def main(site):
         "--window-size=1100,850",
         LOGIN_URLS[site],
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=browser_env())
-    threading.Thread(target=watchdog, args=(chrome, port), daemon=True).start()
+    threading.Thread(target=watchdog, args=(chrome, port, site), daemon=True).start()
 
     try:
         with sync_playwright() as p:
@@ -232,6 +274,7 @@ def main(site):
                 chrome.wait(5)
             except subprocess.TimeoutExpired:
                 chrome.kill()
+        finalize(site)
 
 
 if __name__ == "__main__":
