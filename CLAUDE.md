@@ -32,6 +32,10 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
   Windows `%APPDATA%\Prijsvergelijker` (sessions/, profiles/, favorites.json,
   settings.json, log.txt). In de ingepakte app: `SSL_CERT_FILE` = certifi (anders
   CERTIFICATE_VERIFY_FAILED).
+- `favsync.py` — Mijn lijst + verzendinstellingen synchroniseren via een gekozen map (iCloud Drive,
+  Google Drive, …; keuze in `sync.json`, bestanden in `<map>/Prijsvergelijker/`). Driewegs samenvoegen
+  met `favorites.base.json` (= stand bij vorige sync). Logins/sessies gaan nooit mee. De UI bewaart
+  één voor één (`favChain`) en haalt wijzigingen op bij focus van het venster.
 - `static/index.html` — hele UI (vanilla JS).
 - Release: `prijsvergelijker.spec` (PyInstaller) + `.github/workflows/release.yml`
   (tag `vX.Y.Z` pushen). Versie staat in `paths.py`. Mac wordt apart gebouwd voor

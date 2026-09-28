@@ -215,6 +215,7 @@
       <div class="toolbar" id="listBar">
         <input type="search" class="filter" id="listQ" placeholder="Zoek in mijn lijst (product, merk, winkel, groep…)" style="width:320px">
         <span id="listInfo"></span>
+        <button id="syncBtn" data-syncdlg title="Mijn lijst delen tussen je computers via iCloud, Google Drive, …">☁︎ Synchroniseren</button>
         <button class="primary" id="refreshAll">↻ Prijzen vernieuwen</button>
       </div>
       <div id="listBody"></div>
@@ -264,6 +265,24 @@
       <tbody id="shipRows"></tbody></table>
     <div class="row2">
       <button value="ok" class="primary" style="order:2">Bewaren</button>
+      <button value="cancel" formnovalidate style="order:1">Annuleren</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="syncDlg" style="width:min(560px,94vw)">
+  <form method="dialog">
+    <h3>Mijn lijst synchroniseren</h3>
+    <p>Kies een map die al gesynchroniseerd wordt (iCloud Drive, Google Drive, …) en kies op je
+       andere computer dezelfde map. Mijn lijst, bewaarde zoekopdrachten en verzendvoorwaarden gaan
+       dan mee en worden samengevoegd. Je logins gaan <b>niet</b> mee: log op elke computer zelf in.</p>
+    <div id="syncChoices"></div>
+    <label for="syncPath" style="margin-top:10px">Of een andere map (volledig pad)</label>
+    <input id="syncPath" placeholder="bv. /Users/naam/Dropbox of D:\Mijn Drive" autocomplete="off">
+    <p id="syncState" style="margin-top:10px"></p>
+    <div class="row2">
+      <button value="ok" class="primary" style="order:3">Bewaren</button>
+      <button value="off" formnovalidate style="order:2">Uitzetten</button>
       <button value="cancel" formnovalidate style="order:1">Annuleren</button>
     </div>
   </form>
@@ -406,16 +425,37 @@ const favIndex = () => new Set(favs.groups.flatMap(g => g.items.map(favKey)));
 const today = () => new Date().toISOString().slice(0, 10);
 const shortDate = d => d ? d.slice(8, 10) + "/" + d.slice(5, 7) : "";
 
-async function loadFavs() {
-  try { favs = await (await fetch("/api/favorites")).json(); } catch {}
-  favs.searches ||= []; favs.groups ||= [];
+// Opslaan/ophalen één voor één (anders kan een trage oude opslag een nieuwere overschrijven).
+// De server voegt samen met de gesynchroniseerde map; dat resultaat nemen we over, tenzij je
+// intussen al iets anders veranderde (dan volgt er sowieso nog een opslag).
+let favChain = Promise.resolve();
+function adoptFavs(snapshot, data) {
+  if (!data || JSON.stringify(favs) !== snapshot) return;
+  favs = { searches: data.searches || [], groups: data.groups || [] };
+  if (JSON.stringify(favs) === snapshot) return;  // niets nieuws van de andere computer
   renderSaved(); renderFavCount();
+  if (tab === "list") renderList();
+  if (results) render();
+  if (tab === "shoplists") renderShopLists();
 }
-async function saveFavs() {
+function loadFavs() {
+  const snapshot = JSON.stringify(favs);
+  return favChain = favChain.then(async () => {
+    try { adoptFavs(snapshot, await (await fetch("/api/favorites")).json()); } catch {}
+  });
+}
+function saveFavs() {
   renderSaved(); renderFavCount();
-  await fetch("/api/favorites", { method: "PUT", headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify(favs) });
+  const body = JSON.stringify(favs);
+  return favChain = favChain.then(async () => {
+    try {
+      const r = await (await fetch("/api/favorites", { method: "PUT", headers: { "Content-Type": "application/json" }, body })).json();
+      adoptFavs(body, r.favorites);
+    } catch (err) { toast("Mijn lijst bewaren mislukt: " + err, true); }
+  });
 }
+// terug naar de app (bv. na werken op de andere computer): wijzigingen ophalen
+window.addEventListener("focus", () => loadFavs());
 function renderFavCount() {
   const n = favs.groups.reduce((a, g) => a + g.items.length, 0);
   document.getElementById("favCount").textContent = n ? `(${n})` : "";
@@ -498,7 +538,7 @@ function setTab(t) {
   document.getElementById("cartView").hidden = t !== "carts";
   document.getElementById("shopListView").hidden = t !== "shoplists";
   document.body.classList.toggle("wide", t === "search" && view === "cols" && !!results);
-  if (t === "list") renderList();
+  if (t === "list") { renderList(); loadFavs(); }
   if (t === "carts") loadCarts();
   if (t === "shoplists") shopLists ? renderShopLists() : loadShopLists(false);
 }
@@ -511,7 +551,8 @@ function renderList() {
   document.getElementById("listBar").hidden = !favs.groups.length;
   if (!favs.groups.length) {
     el.innerHTML = `<div class="msg">Je lijst is nog leeg.<br>Zoek een product en klik op ☆ om het hier te bewaren.
-      Zet hetzelfde product van verschillende winkels in dezelfde groep om ze te vergelijken.</div>`;
+      Zet hetzelfde product van verschillende winkels in dezelfde groep om ze te vergelijken.
+      <br><br><button data-syncdlg>☁︎ Lijst van een andere computer ophalen (synchroniseren)</button></div>`;
     return;
   }
   const withPP = it => ({ ...it, pp: it.price != null && it.pieces ? it.price / it.pieces : null });
@@ -564,6 +605,7 @@ function renderList() {
 document.getElementById("listQ").addEventListener("input", e => { listQuery = e.target.value; renderList(); });
 document.getElementById("listView").addEventListener("click", async e => {
   const d = e.target.dataset;
+  if (d.syncdlg != null) return openSyncDialog();
   if (d.cartfav) {
     const it = favs.groups.flatMap(g => g.items).find(x => favKey(x) === d.cartfav);
     if (it) openCartDialog(it);
@@ -1016,6 +1058,37 @@ document.getElementById("slBody").addEventListener("click", e => {
     if (favIndex().has(favKey(it))) { removeFav(favKey(it)); renderShopLists(); }
     else { const { last, times, ...rest } = it; openFavDialog(rest, it.name); }
   }
+});
+
+// ---------- synchroniseren (Mijn lijst via iCloud Drive, Google Drive, …) ----------
+async function openSyncDialog() {
+  const st = await (await fetch("/api/sync")).json();
+  const choices = st.candidates.map(c => `<label style="display:flex;gap:8px;align-items:center;margin:4px 0">
+      <input type="radio" name="syncPick" value="${esc(c.path)}" style="width:auto" ${c.path === st.folder ? "checked" : ""}>
+      <b>${esc(c.label)}</b> <span class="code">${esc(c.path)}</span></label>`).join("");
+  document.getElementById("syncChoices").innerHTML = choices ||
+    `<p class="code">Geen iCloud Drive of Google Drive gevonden op deze computer. Vul hieronder een map in.</p>`;
+  const known = st.candidates.some(c => c.path === st.folder);
+  document.getElementById("syncPath").value = known ? "" : st.folder;
+  document.getElementById("syncState").innerHTML = !st.folder ? "Staat nu <b>uit</b>: Mijn lijst staat enkel op deze computer."
+    : st.active ? `✓ Staat aan: <span class="code">${esc(st.folder)}</span>`
+    : `⚠ Map nu niet bereikbaar (${esc(st.folder)}). De app werkt lokaal verder en synchroniseert zodra de map er weer is.`;
+  document.getElementById("syncDlg").showModal();
+}
+document.getElementById("syncPath").addEventListener("input", () =>
+  document.querySelectorAll("input[name=syncPick]").forEach(r => r.checked = false));
+document.getElementById("syncDlg").addEventListener("close", async () => {
+  const how = document.getElementById("syncDlg").returnValue;
+  if (how !== "ok" && how !== "off") return;
+  const picked = document.querySelector("input[name=syncPick]:checked");
+  const folder = how === "off" ? "" : (document.getElementById("syncPath").value.trim() || picked?.value || "");
+  if (how === "ok" && !folder) return toast("Kies eerst een map.", true);
+  await favChain;  // eerst lopende opslag afwerken
+  const r = await (await fetch("/api/sync", { method: "PUT", headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({ folder }) })).json();
+  if (r.error) return toast(r.error, true);
+  adoptFavs(JSON.stringify(favs), r.favorites);
+  toast(folder ? "✓ Synchroniseren staat aan. Kies op je andere computer dezelfde map." : "Synchroniseren staat uit.");
 });
 
 loadStatus();

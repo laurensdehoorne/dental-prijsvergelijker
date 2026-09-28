@@ -15,14 +15,12 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import carts
+import favsync
 import sites
 
 import paths
 
 PORT = 8765
-FAVORITES = paths.FAVORITES
-SETTINGS = paths.SETTINGS
-fav_lock = threading.Lock()
 SITES = sites.SITES
 login_procs = {}
 pool = ThreadPoolExecutor(max_workers=8)
@@ -44,18 +42,8 @@ def run_search(site, query):
         return {"items": [], "error": f"{type(e).__name__}: {e}"}
 
 
-def load_favorites():
-    try:
-        return json.loads(FAVORITES.read_text())
-    except (OSError, ValueError):
-        return {"searches": [], "groups": []}
-
-
 def load_settings():
-    try:
-        data = json.loads(SETTINGS.read_text())
-    except (OSError, ValueError):
-        data = {}
+    data = favsync.read_settings()
     shipping = {k: dict(v) for k, v in carts.DEFAULT_SHIPPING.items()}
     for k, v in (data.get("shipping") or {}).items():
         if k in shipping:
@@ -230,7 +218,10 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/synonyms":
             self.send_json(sites.SYNONYMS)
         elif url.path == "/api/favorites":
-            self.send_json(load_favorites())
+            self.send_json(favsync.load())  # samengevoegd met de gedeelde map (als die aan staat)
+        elif url.path == "/api/sync":
+            self.send_json({"folder": favsync.folder(), "active": favsync.shared_dir() is not None,
+                            "candidates": favsync.candidates()})
         else:
             self.send_error(404)
 
@@ -243,16 +234,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(403)
         if self.path == "/api/settings":
             data = self.read_json()
-            SETTINGS.write_text(json.dumps({"shipping": data.get("shipping", {})}, indent=1))
+            favsync.write_settings({"shipping": data.get("shipping", {})})
             return self.send_json(load_settings())
+        if self.path == "/api/sync":
+            try:
+                favsync.set_folder((self.read_json().get("folder") or "").strip())
+            except ValueError as e:
+                return self.send_json({"error": str(e)}, 400)
+            return self.send_json({"ok": True, "favorites": favsync.load()})
         if self.path != "/api/favorites":
             return self.send_error(404)
-        data = self.read_json()
-        with fav_lock:
-            tmp = FAVORITES.with_suffix(".tmp")
-            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1))
-            tmp.replace(FAVORITES)
-        self.send_json({"ok": True})
+        self.send_json({"ok": True, "favorites": favsync.sync(self.read_json())})
 
     def do_POST(self):
         if self.foreign():
