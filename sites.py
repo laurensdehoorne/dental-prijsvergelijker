@@ -61,6 +61,25 @@ class AnonSession:
 
 # ---------- hulpfuncties ----------
 
+# Engels -> Nederlands (webshops gebruiken beide door elkaar). Gebruikt voor de
+# matchscore (via /api/synonyms) en om opnieuw te zoeken als een winkel niets vindt.
+SYNONYMS = {
+    "blue": "blauw", "red": "rood", "green": "groen", "yellow": "geel", "white": "wit",
+    "black": "zwart", "pink": "roze", "rose": "roze", "purple": "paars", "orange": "oranje",
+    "grey": "grijs", "gray": "grijs", "brown": "bruin",
+    "fine": "fijn", "coarse": "grof", "extrafine": "extrafijn",
+    "paste": "pasta", "gloves": "handschoenen", "glove": "handschoen",
+    "needles": "naalden", "needle": "naald", "syringes": "spuiten", "syringe": "spuit",
+}
+
+
+def translate(query):
+    """'prophycare blue directa' -> 'prophycare blauw directa' (None als er niets te vertalen is)."""
+    words = query.split()
+    out = [SYNONYMS.get(w.lower(), w) for w in words]
+    return " ".join(out) if out != words else None
+
+
 def parse_euro(s):
     """'€ 1.234,50' -> 1234.5 ; '5.50' -> 5.5 ; '4.-' -> 4.0"""
     s = html.unescape(s).replace("€", "").replace("\xa0", " ").strip()

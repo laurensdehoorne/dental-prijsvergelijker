@@ -26,7 +26,11 @@ pool = ThreadPoolExecutor(max_workers=8)
 
 def run_search(site, query):
     try:
-        return {"items": SITES[site]["search"](query), "error": None}
+        items = SITES[site]["search"](query)
+        alt = sites.translate(query)
+        if not items and alt:  # bv. 'blue' niets gevonden -> opnieuw met 'blauw'
+            items = SITES[site]["search"](alt)
+        return {"items": items, "error": None}
     except Exception as e:
         traceback.print_exc()
         return {"items": [], "error": f"{type(e).__name__}: {e}"}
@@ -99,6 +103,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({s: f.result() for s, f in futures.items()})
         elif url.path == "/api/status":
             self.send_json(status())
+        elif url.path == "/api/synonyms":
+            self.send_json(sites.SYNONYMS)
         elif url.path == "/api/favorites":
             self.send_json(load_favorites())
         else:

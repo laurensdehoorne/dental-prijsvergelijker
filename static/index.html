@@ -528,9 +528,13 @@ function norm(t) {
              (m, a, b, c) => a + b + (c || ""));
 }
 const tokens = t => norm(t).split(/[^a-z0-9.:]+/).map(x => x.replace(/^[.:]+|[.:]+$/g, "")).filter(Boolean);
+let SYN = {};  // Engels -> Nederlands, van de server (sites.SYNONYMS)
+fetch("/api/synonyms").then(r => r.json()).then(d => { SYN = d; if (results) render(); }).catch(() => {});
+const canon = w => SYN[w] || w;
 function matchScore(qTok, it) {
   if (!qTok.length) return 1;
-  const words = tokens(it.name + " " + it.pack + " " + it.code + " " + (it.brand || ""));
+  qTok = qTok.map(canon);
+  const words = tokens(it.name + " " + it.pack + " " + it.code + " " + (it.brand || "")).map(canon);
   const set = new Set(words);
   let sum = 0;
   for (const q of qTok) {
