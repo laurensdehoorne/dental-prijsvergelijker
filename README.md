@@ -20,7 +20,9 @@ Op de [Releases-pagina](https://github.com/laurensdehoorne/dental-prijsvergelijk
 staan kant-en-klare versies — geen Python nodig:
 
 - **Mac**: `Prijsvergelijker-mac.zip` → uitpakken → naar *Apps* slepen.
-  Eerste keer: rechtsklik → **Open** → **Open** (niet door Apple ondertekend).
+  Eerste keer (niet door Apple ondertekend): app openen → **Gereed** →
+  *Systeeminstellingen → Privacy en beveiliging* → **Toch openen**.
+  Of in Terminal: `xattr -dr com.apple.quarantine /Applications/Prijsvergelijker.app`
 - **Windows**: `Prijsvergelijker-windows.zip` → uitpakken → `Prijsvergelijker.exe`.
   Bij "Windows heeft uw pc beschermd": **Meer info** → **Toch uitvoeren**.
 

@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Prijsvergelijker"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 FROZEN = getattr(sys, "frozen", False)
 SRC = Path(__file__).parent
 RES = Path(getattr(sys, "_MEIPASS", SRC))
@@ -28,6 +28,15 @@ def _data_dir():
         base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
     return base / APP_NAME
 
+
+# Ingepakte app: Python heeft dan geen toegang tot de certificaten van het systeem
+# (fout CERTIFICATE_VERIFY_FAILED bij elke webwinkel). Daarom de meegeleverde lijst gebruiken.
+if FROZEN and not os.environ.get("SSL_CERT_FILE"):
+    try:
+        import certifi
+        os.environ["SSL_CERT_FILE"] = certifi.where()
+    except ImportError:
+        pass
 
 DATA = _data_dir()
 DATA.mkdir(parents=True, exist_ok=True)

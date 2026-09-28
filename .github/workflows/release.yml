@@ -56,7 +56,11 @@ jobs:
             ## Installeren
 
             **Mac** — download `Prijsvergelijker-mac.zip`, pak uit en sleep **Prijsvergelijker** naar *Apps*.
-            De eerste keer: rechtsklik op de app → **Open** → **Open** (de app is niet door Apple ondertekend).
+            De app is niet door Apple ondertekend, dus de eerste keer blokkeert macOS hem:
+            1. Open de app; macOS meldt dat hij niet geopend kan worden → klik **Gereed**.
+            2. Ga naar **Systeeminstellingen → Privacy en beveiliging**, scroll naar beneden en klik
+               bij "Prijsvergelijker werd geblokkeerd" op **Toch openen**; bevestig met je wachtwoord of Touch ID.
+            Daarna opent hij gewoon. Andere toestemmingen (camera, bestanden, …) zijn niet nodig.
 
             **Windows** — download `Prijsvergelijker-windows.zip`, pak uit (bv. in *Documenten*) en start
             `Prijsvergelijker.exe`. Toont Windows "Windows heeft uw pc beschermd": klik **Meer info** → **Toch uitvoeren**.
