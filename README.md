@@ -1,6 +1,6 @@
 # Dentale Prijsvergelijker
 
-Een lokale webapp die één zoekopdracht tegelijk uitvoert bij:
+Desktop-app voor **Mac en Windows**. Een lokale webapp die één zoekopdracht tegelijk uitvoert bij:
 
 | Winkel | Prijzen zonder login | Met login |
 |---|---|---|
@@ -11,24 +11,37 @@ Een lokale webapp die één zoekopdracht tegelijk uitvoert bij:
 | Denta (BE) | geen prijzen | exacte prijs |
 | Henry Schein (BE) | geen prijzen | exacte prijs |
 
-## Starten
+## Installeren en starten
 
-**Mac-app:** open **Prijsvergelijker** in je map *Apps* (`~/Applications`),
-of zet hem in je Dock. De app opent in een eigen venster; venster sluiten
-stopt alles. Links naar webshops openen in je gewone browser.
-
-De app gebruikt de code uit deze map. Na een `git pull` start hij dus meteen
-de nieuwe versie. Opnieuw bouwen (bv. op een andere Mac, of na een
-verplaatsing van deze map):
+### Mac
 
 ```bash
 ./build_app.sh
 ```
 
-Alternatief zonder app: dubbelklik `start.command` (opent in je browser op
-http://localhost:8765).
+Dat maakt **Prijsvergelijker** in je map *Apps* (`~/Applications`); zet hem
+in je Dock. De app opent in een eigen venster; venster sluiten stopt alles.
+Foutmeldingen: `~/Library/Logs/Prijsvergelijker.log`.
 
-Foutmeldingen van de app: `~/Library/Logs/Prijsvergelijker.log`.
+### Windows
+
+1. Haal de code binnen: `git clone` of op GitHub *Code → Download ZIP*
+   (en uitpakken, bv. in `Documenten\dental-prijsvergelijker`).
+2. Dubbelklik `windows\Installeer.bat`. Dat installeert zo nodig Python 3.12
+   (via winget), de benodigde pakketten, en maakt een snelkoppeling
+   **Prijsvergelijker** op het bureaublad en in het Startmenu.
+3. Inloggen gebeurt in Chrome, of in Edge als Chrome niet geïnstalleerd is.
+
+Foutmeldingen: `%LOCALAPPDATA%\Prijsvergelijker\log.txt`.
+Zonder app-venster (in de browser): `windows\start-in-browser.bat`.
+
+### Bijwerken
+
+De app draait de code uit deze map: na `git pull` (of een nieuwe ZIP op
+dezelfde plek) meteen de nieuwe versie. Op Windows na een update best
+`Installeer.bat` nog eens draaien (voor nieuwe pakketten).
+
+Links naar webshops openen altijd in je gewone browser.
 
 ## Inloggen
 

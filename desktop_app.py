@@ -1,5 +1,7 @@
-"""Start de prijsvergelijker als Mac-app: server in de achtergrond en de
-interface in een eigen venster (WebKit). Venster sluiten = app stoppen."""
+"""Start de prijsvergelijker als desktop-app (Mac en Windows): server in de
+achtergrond en de interface in een eigen venster (WebKit op Mac, Edge WebView2
+op Windows). Venster sluiten = app stoppen."""
+import os
 import sys
 import threading
 from pathlib import Path
@@ -9,11 +11,23 @@ import webview
 import app
 
 ROOT = Path(__file__).parent
-ICON = ROOT / "macapp" / "icon.png"
+ICON = ROOT / "assets" / "icon.png"
+
+
+def log_to_file():
+    """Zonder console (Windows pythonw) gaat print() nergens heen: naar een logbestand."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    base = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Prijsvergelijker"
+    base.mkdir(parents=True, exist_ok=True)
+    f = open(base / "log.txt", "a", buffering=1, encoding="utf-8")
+    sys.stdout = sys.stderr = f
 
 
 def mac_branding():
     """Naam en icoon in het Dock/menu (anders toont macOS 'Python')."""
+    if sys.platform != "darwin":
+        return
     try:
         from AppKit import NSApplication, NSImage
         from Foundation import NSBundle
@@ -27,6 +41,7 @@ def mac_branding():
 
 
 def main():
+    log_to_file()
     try:
         server = app.make_server()
     except OSError:

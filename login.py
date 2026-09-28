@@ -10,6 +10,7 @@ Gebruik: python login.py <site>   (dentaldiscount, basiq, dentaladdict, hofmeest
 """
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -23,7 +24,26 @@ from sites import SITES
 ROOT = Path(__file__).parent
 SESSIONS = ROOT / "sessions"
 PROFILES = ROOT / "profiles"
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+
+def find_browser():
+    """Chrome, anders Edge (staat op elke Windows-pc). Beide ondersteunen de debugpoort."""
+    if sys.platform == "darwin":
+        candidates = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                      os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+                      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"]
+    elif sys.platform == "win32":
+        env = os.environ
+        dirs = [env.get("PROGRAMFILES", r"C:\Program Files"), env.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
+                env.get("LOCALAPPDATA", "")]
+        candidates = [os.path.join(d, r"Google\Chrome\Application\chrome.exe") for d in dirs if d] + \
+                     [os.path.join(d, r"Microsoft\Edge\Application\msedge.exe") for d in dirs if d]
+    else:
+        candidates = [shutil.which(n) or "" for n in ("google-chrome", "chromium", "chromium-browser", "microsoft-edge")]
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    sys.exit("Geen Chrome of Edge gevonden.")
 
 LOGIN_URLS = {k: v["login_url"] for k, v in SITES.items()}
 
@@ -73,7 +93,7 @@ def main(site):
     port = free_port()
 
     chrome = subprocess.Popen([
-        CHROME,
+        find_browser(),
         f"--user-data-dir={PROFILES / site}",
         f"--remote-debugging-port={port}",
         "--no-first-run",

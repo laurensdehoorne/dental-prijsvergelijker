@@ -14,7 +14,7 @@ fi
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp macapp/icon.icns "$APP/Contents/Resources/icon.icns"
+cp assets/icon.icns "$APP/Contents/Resources/icon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -38,7 +38,7 @@ PLIST
 cat > "$APP/Contents/MacOS/Prijsvergelijker" <<LAUNCH
 #!/bin/bash
 cd "$PROJECT" || { osascript -e 'display alert "Prijsvergelijker" message "Projectmap niet gevonden: $PROJECT"'; exit 1; }
-exec .venv/bin/python mac_app.py >> "\$HOME/Library/Logs/Prijsvergelijker.log" 2>&1
+exec .venv/bin/python desktop_app.py >> "\$HOME/Library/Logs/Prijsvergelijker.log" 2>&1
 LAUNCH
 chmod +x "$APP/Contents/MacOS/Prijsvergelijker"
 touch "$APP"
