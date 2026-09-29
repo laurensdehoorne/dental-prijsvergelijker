@@ -643,34 +643,68 @@ document.getElementById("listView").addEventListener("click", async e => {
     favs.groups.splice(d.delgroup, 1); saveFavs(); renderList();
   }
   if (d.research != null) runSearch(favs.groups[d.research].name);
-  if (e.target.id === "refreshAll") refreshAll(e.target);
+  if (e.target.id === "refreshAll") refreshAll();
 });
-async function refreshAll(btn) {
-  const all = favs.groups.flatMap(g => g.items);
-  const keys = all.map(favKey);  // favs kan intussen vervangen worden (sync): straks op sleutel terugzoeken
-  btn.disabled = true;
-  btn.innerHTML = `<span class="spinner"></span>Vernieuwen (${all.length})…`;
+// Prijzen vernieuwen in porties van 20 (grote lijsten: na elke portie bewaren, zodat werk
+// niet verloren gaat en de andere computer het ziet). Automatisch: 1×/dag per product
+// ('checked'), enkel producten die vandaag nog niet bekeken zijn, oudste eerst.
+const REFRESH_CHUNK = 20;
+let refreshing = false;
+function refreshBtn(text) {
+  const b = document.getElementById("refreshAll");
+  b.disabled = text != null;
+  b.innerHTML = text ?? "↻ Prijzen vernieuwen";
+}
+// afgemeld bij een winkel waar je normaal ingelogd bent: niet automatisch vernieuwen
+// (je zou de publieke prijs krijgen in plaats van je eigen prijs)
+const canAutoRefresh = it => !(wasLoggedIn.has(it.site) && !shops[it.site]?.logged_in);
+async function refreshPrices(auto) {
+  if (refreshing) return;
+  refreshing = true;
+  const done = new Set();
+  const todo = () => favs.groups.flatMap(g => g.items)
+    .filter(it => !done.has(favKey(it)) && (!auto || ((it.checked || it.updated) !== today() && canAutoRefresh(it))))
+    .sort((a, b) => (a.checked || a.updated || "").localeCompare(b.checked || b.updated || ""));
   try {
-    const res = await (await fetch("/api/refresh", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: all.map(({ site, code, name, url }) => ({ site, code, name, url })) }) })).json();
-    const current = new Map(favs.groups.flatMap(g => g.items).map(x => [favKey(x), x]));
-    res.items.forEach((fresh, i) => {
-      const it = current.get(keys[i]);
-      if (!it) return;  // intussen verwijderd
-      if (!fresh) { it.missing = true; return; }
-      if (fresh.price != null && it.price != null && fresh.price !== it.price) it.prev_price = it.price;
-      Object.assign(it, { code: fresh.code, price: fresh.price, old_price: fresh.old_price, volume_price: fresh.volume_price,
-                          from_price: !!fresh.from_price,
-                          url: fresh.url, image: fresh.image || it.image, brand: fresh.brand || it.brand || "",
-                          missing: false, updated: today() });
-    });
-    await saveFavs();
+    if (auto) await loadFavs();  // eerst de laatste stand (misschien al vernieuwd op de andere computer)
+    const total = todo().length;
+    for (let chunk = todo().slice(0, REFRESH_CHUNK); chunk.length; chunk = todo().slice(0, REFRESH_CHUNK)) {
+      refreshBtn(`<span class="spinner"></span>Vernieuwen ${Math.min(done.size, total)}/${total}…`);
+      const keys = chunk.map(favKey);  // favs kan intussen vervangen worden (sync): straks op sleutel terugzoeken
+      keys.forEach(k => done.add(k));
+      const res = await (await fetch("/api/refresh", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: chunk.map(({ site, code, name, url }) => ({ site, code, name, url })) }) })).json();
+      const current = new Map(favs.groups.flatMap(g => g.items).map(x => [favKey(x), x]));
+      res.items.forEach((fresh, i) => {
+        const it = current.get(keys[i]);
+        if (!it) return;  // intussen verwijderd
+        it.checked = today();
+        if (!fresh) { it.missing = true; return; }
+        if (fresh.price != null && it.price != null && fresh.price !== it.price) it.prev_price = it.price;
+        Object.assign(it, { code: fresh.code, price: fresh.price, old_price: fresh.old_price, volume_price: fresh.volume_price, volume_qty: fresh.volume_qty,
+                            from_price: !!fresh.from_price,
+                            url: fresh.url, image: fresh.image || it.image, brand: fresh.brand || it.brand || "",
+                            missing: false, updated: today() });
+      });
+      await saveFavs();
+      if (tab === "list") renderList();
+      if (auto) await loadFavs();
+    }
+  } catch (err) {
+    if (!auto) toast("Prijzen vernieuwen mislukt: " + err, true);
   } finally {
-    btn.disabled = false;
-    btn.textContent = "↻ Prijzen vernieuwen";
-    renderList();
+    refreshing = false;
+    refreshBtn();
+    if (tab === "list") renderList();
   }
 }
+async function refreshAll() { await refreshPrices(false); }
+// automatisch: bij opstarten (na loginstatus en lijst) en daarna elk uur kijken of er iets van vandaag ontbreekt
+async function autoRefresh() {
+  try { await statusReady; await favChain; } catch {}
+  if (favsLoaded) refreshPrices(true);
+}
+setInterval(autoRefresh, 3600 * 1000);
 
 const op = document.getElementById("onlyPriced");
 op.checked = onlyPriced;
@@ -738,7 +772,7 @@ function priceCell(it) {
   if (it.price == null) return `<span class="none">log in<span class="hint"> voor prijs</span></span>`;
   let s = (it.old_price ? `<span class="old">${eur(it.old_price)}</span>` : "") +
     (it.from_price ? `<small title="Laagste prijs van de verpakkingen">vanaf </small>` : "") + `<b>${eur(it.price)}</b>`;
-  if (it.volume_price) s += `<span class="range"><span class="hint">staffel: </span>vanaf ${eur(it.volume_price)} bij grote aantallen</span>`;
+  if (it.volume_price) s += `<span class="range"><span class="hint">staffel: </span>${eur(it.volume_price)} ${it.volume_qty ? `vanaf ${it.volume_qty} st.` : "bij grote aantallen"}</span>`;
   return s;
 }
 
@@ -1121,9 +1155,10 @@ document.getElementById("syncDlg").addEventListener("close", async () => {
   toast(folder ? "✓ Synchroniseren staat aan. Kies op je andere computer dezelfde map." : "Synchroniseren staat uit.");
 });
 
-loadStatus();
+const statusReady = loadStatus();
 loadFavs();
-loadShopLists(false, true);  // op de achtergrond, voor het label "eerder besteld"
+loadShopLists(false, true);
+autoRefresh();  // op de achtergrond, voor het label "eerder besteld"
 </script>
 </body>
 </html>

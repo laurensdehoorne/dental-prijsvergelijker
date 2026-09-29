@@ -25,6 +25,7 @@ SITES = sites.SITES
 login_procs = {}
 pool = ThreadPoolExecutor(max_workers=8)
 lists_pool = ThreadPoolExecutor(max_workers=7)  # apart: lijsten vernieuwen vertraagt zoeken niet
+refresh_pool = ThreadPoolExecutor(max_workers=7)  # idem voor prijzen vernieuwen (Mijn lijst)
 LOCAL_HOSTS = ("127.0.0.1", "localhost")
 
 
@@ -150,7 +151,7 @@ def refresh_items(items):
                 for i in idxs]
 
     out = [None] * len(items)
-    for f in [pool.submit(work, s, idxs) for s, idxs in by_site.items() if s in SITES]:
+    for f in [refresh_pool.submit(work, s, idxs) for s, idxs in by_site.items() if s in SITES]:
         for i, res in f.result():
             out[i] = res
     return out

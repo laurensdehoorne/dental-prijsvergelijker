@@ -134,7 +134,7 @@ def strip_tags(s):
 
 
 def item(site, *, code="", name="", pack="", price=None, volume_price=None, old_price=None,
-         url="", image="", brand=""):
+         url="", image="", brand="", volume_qty=None):
     price = price or None  # 0,00 = geen echte prijs (bv. niet leverbaar)
     return {
         "site": site, "code": code, "name": name, "pack": pack, "price": price,
@@ -142,6 +142,7 @@ def item(site, *, code="", name="", pack="", price=None, volume_price=None, old_
         "brand": brand if brand and brand.lower() not in name.lower() else "",
         # laagste staffelprijs (bij grote aantallen), enkel als lager dan de gewone prijs
         "volume_price": volume_price if volume_price and price and volume_price < price else None,
+        "volume_qty": volume_qty if volume_price and price and volume_price < price else None,
         "old_price": old_price if old_price and price and old_price > price else None,
         "pieces": pack_size(pack) or pack_size(name), "url": url, "image": image,
     }
@@ -449,8 +450,27 @@ def denta_search(query):
 
 
 
+def _denta_price(url):
+    """Prijs van een productpagina: stukprijs (vanaf 1) + laagste promo-/staffelprijs, bv.
+    <span class="price-line" data-value="98,90" data-qty="1"> ... data-value="87,90" data-qty="5">.
+    Zonder staffels: de gewone prijs (gtm-price)."""
+    b = _denta_fetch(url)
+    lines = sorted((int(q), parse_euro(v)) for v, q in
+                   re.findall(r'class="price-line" data-value="([^"]*)" data-qty="(\d+)"', b))
+    lines = [(q, v) for q, v in lines if v]
+    old = re.search(r'class="price-old">([^<]*)<', b)
+    if lines:
+        low = min(lines, key=lambda x: x[1])
+        return {"price": lines[0][1], "volume_price": low[1], "volume_qty": low[0],
+                "old_price": parse_euro(old.group(1)) if old else None}
+    reg = re.search(r'class="gtm-price">([^<]*)<', b)
+    return {"price": parse_euro(reg.group(1)) if reg else None,
+            "old_price": parse_euro(old.group(1)) if old else None}
+
+
 def denta_lists():
-    """Artikelhistoriek: alles wat je ooit kocht, met de datum van de laatste aankoop (zonder prijs)."""
+    """Artikelhistoriek: alles wat je ooit kocht, met de datum van de laatste aankoop.
+    De historiek toont geen prijzen: die komen van de productpagina's (enkele tegelijk; Denta is traag)."""
     body = _denta_fetch(DENTA_BASE + "/artikelgeschiedenis/")
     items = []
     for b in re.split(r'<tr>\s*<td class="pro-thumbnail', body)[1:]:
@@ -470,6 +490,16 @@ def denta_lists():
         if last:
             it["last"] = f"{last.group(3)}-{last.group(2)}-{last.group(1)}"
         items.append(it)
+
+    def priced(it):
+        try:
+            p = _denta_price(it["url"])
+        except Exception:
+            return it  # zonder prijs tonen
+        return {**item("denta", code=it["code"], name=it["name"], url=it["url"], image=it["image"], **p),
+                **({"last": it["last"]} if "last" in it else {})}
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        items = list(ex.map(priced, items))
     items.sort(key=lambda x: x.get("last", ""), reverse=True)
     return [{"name": "Artikelhistoriek", "items": items, "ordered": True}]
 

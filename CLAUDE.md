@@ -16,7 +16,8 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
   (bij varianten met "Vanaf" → `from_price`).
 - Winkellijsten (`/api/lists`, tab 📋): per winkel `SITES[site]["lists"]()` → `[{name, items, ordered}]`.
   Ordent (DD/Hofmeester/ADT): `ajax/products.php?page_type=ordered|wishlist` (per 48); Basiq: bewaarde
-  mandjes + afnamelijst uit laatste 60 bestellingen (OCC-API); Denta: `/artikelgeschiedenis/`.
+  mandjes + afnamelijst uit laatste 60 bestellingen (OCC-API); Denta: `/artikelgeschiedenis/` (zonder prijzen: die komen van de productpagina's,
+  `_denta_price`: stukprijs + laagste promo-/staffelprijs uit `price-line data-value/data-qty`).
   Henry Schein: bestellijsten (`ShoppingLists.aspx`, per rij `data-val`-JSON; enkel `ShoppingListView`
   openen, nooit de `purge`-link = verwijderen). Nog niet: Dental Addict (`module/regularbuys/regularbuys`)
   en HS-bestelgeschiedenis (`Orders/ItemsFromHistory.aspx`): leeg op dit account, geen voorbeeld. Bewaard in `lists.json`
@@ -33,6 +34,10 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
   het venster dicht is of er na 25 s geen tabblad is. Wachtwoorden worden nooit gelezen.
   'Opnieuw openen': de app maakt `sessions/<site>.stop` aan en wacht; login.py stopt dan netjes
   (browser dicht + finalize). Nodig op Windows, waar terminate() hard is.
+- Mijn lijst: prijzen automatisch 1×/dag vernieuwd (`refreshPrices(true)` bij opstarten + elk uur
+  kijken; per product `checked` = datum laatste poging), in porties van 20 met bewaren na elke portie.
+  Winkels waar je afgemeld bent worden overgeslagen. `/api/refresh` heeft een eigen `refresh_pool`
+  (vertraagt zoeken niet).
 - `app.py` `status()`: "ingelogd?" max. 1×/min per winkel, meteen opnieuw als het sessiebestand wijzigt.
 - `paths.py` — gegevensmap: Mac `~/Library/Application Support/Prijsvergelijker`,
   Windows `%APPDATA%\Prijsvergelijker` (sessions/, profiles/, favorites.json,
