@@ -429,26 +429,53 @@ const shortDate = d => d ? d.slice(8, 10) + "/" + d.slice(5, 7) : "";
 // De server voegt samen met de gesynchroniseerde map; dat resultaat nemen we over, tenzij je
 // intussen al iets anders veranderde (dan volgt er sowieso nog een opslag).
 let favChain = Promise.resolve();
-function adoptFavs(snapshot, data) {
-  if (!data || JSON.stringify(favs) !== snapshot) return;
-  favs = { searches: data.searches || [], groups: data.groups || [] };
-  if (JSON.stringify(favs) === snapshot) return;  // niets nieuws van de andere computer
+let favsLoaded = false;  // pas bewaren als de lijst minstens één keer geladen is (anders wist een lege lijst alles)
+function showFavs() {
   renderSaved(); renderFavCount();
   if (tab === "list") renderList();
   if (results) render();
   if (tab === "shoplists") renderShopLists();
 }
+function adoptFavs(snapshot, data) {
+  if (!data || JSON.stringify(favs) !== snapshot) return;
+  favs = { searches: data.searches || [], groups: data.groups || [] };
+  if (JSON.stringify(favs) === snapshot) return;  // niets nieuws van de andere computer
+  showFavs();
+}
+// Vóór het eerste laden kan favs enkel toevoegingen bevatten: die bij de geladen lijst voegen.
+function withLocalAdditions(data) {
+  const out = { searches: [...(data.searches || [])],
+                groups: (data.groups || []).map(g => ({ ...g, items: [...(g.items || [])] })) };
+  for (const s of favs.searches)
+    if (!out.searches.some(x => x.toLowerCase() === s.toLowerCase())) out.searches.push(s);
+  for (const g of favs.groups) {
+    let t = out.groups.find(x => x.name.toLowerCase() === g.name.toLowerCase());
+    if (!t) out.groups.push(t = { ...g, items: [] });
+    for (const it of g.items) if (!t.items.some(x => favKey(x) === favKey(it))) t.items.push(it);
+  }
+  return out;
+}
+async function firstLoad() {
+  const before = JSON.stringify(favs);
+  favs = withLocalAdditions(await (await fetch("/api/favorites")).json());
+  favsLoaded = true;
+  if (JSON.stringify(favs) !== before) showFavs();
+}
 function loadFavs() {
   const snapshot = JSON.stringify(favs);
   return favChain = favChain.then(async () => {
-    try { adoptFavs(snapshot, await (await fetch("/api/favorites")).json()); } catch {}
+    try {
+      if (!favsLoaded) return await firstLoad();
+      adoptFavs(snapshot, await (await fetch("/api/favorites")).json());
+    } catch {}
   });
 }
 function saveFavs() {
   renderSaved(); renderFavCount();
-  const body = JSON.stringify(favs);
   return favChain = favChain.then(async () => {
     try {
+      if (!favsLoaded) await firstLoad();  // lijst nog niet geladen: eerst ophalen, niet overschrijven
+      const body = JSON.stringify(favs);
       const r = await (await fetch("/api/favorites", { method: "PUT", headers: { "Content-Type": "application/json" }, body })).json();
       adoptFavs(body, r.favorites);
     } catch (err) { toast("Mijn lijst bewaren mislukt: " + err, true); }
@@ -620,13 +647,16 @@ document.getElementById("listView").addEventListener("click", async e => {
 });
 async function refreshAll(btn) {
   const all = favs.groups.flatMap(g => g.items);
+  const keys = all.map(favKey);  // favs kan intussen vervangen worden (sync): straks op sleutel terugzoeken
   btn.disabled = true;
   btn.innerHTML = `<span class="spinner"></span>Vernieuwen (${all.length})…`;
   try {
     const res = await (await fetch("/api/refresh", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: all.map(({ site, code, name, url }) => ({ site, code, name, url })) }) })).json();
+    const current = new Map(favs.groups.flatMap(g => g.items).map(x => [favKey(x), x]));
     res.items.forEach((fresh, i) => {
-      const it = all[i];
+      const it = current.get(keys[i]);
+      if (!it) return;  // intussen verwijderd
       if (!fresh) { it.missing = true; return; }
       if (fresh.price != null && it.price != null && fresh.price !== it.price) it.prev_price = it.price;
       Object.assign(it, { code: fresh.code, price: fresh.price, old_price: fresh.old_price, volume_price: fresh.volume_price,

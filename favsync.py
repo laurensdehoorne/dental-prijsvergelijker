@@ -144,7 +144,10 @@ def sync(mine):
             _write(paths.FAVORITES, mine)
             return mine
         result = merge(_read(BASE), mine, theirs) if theirs is not None else mine
-        _write(f, result)
+        # enkel schrijven als er echt iets verandert: een ongewijzigde (misschien verouderde)
+        # kopie terugschrijven kan in de cloud een nieuwere versie van de andere computer overschrijven
+        if theirs is None or result != merge(None, None, theirs):
+            _write(f, result)
         _write(paths.FAVORITES, result)
         _write(BASE, result)
         return result

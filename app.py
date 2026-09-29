@@ -156,8 +156,27 @@ def refresh_items(items):
     return out
 
 
+STATUS_MAX_AGE = 60
+_status_cache = {}  # site -> (mtime sessiebestand, tijd, ingelogd)
+
+
+def _logged_in_cached(site):
+    """'Ingelogd?' kost een paginaopvraag per winkel; maximaal 1 keer per minuut, tenzij het
+    sessiebestand veranderde (inloggen/afmelden): dan meteen opnieuw."""
+    try:
+        mtime = (sites.SESSIONS / f"{site}.json").stat().st_mtime
+    except OSError:
+        mtime = None
+    hit = _status_cache.get(site)
+    if hit and hit[0] == mtime and time.time() - hit[1] < STATUS_MAX_AGE:
+        return hit[2]
+    value = bool(SITES[site]["logged_in"]())
+    _status_cache[site] = (mtime, time.time(), value)
+    return value
+
+
 def status():
-    futures = {s: pool.submit(cfg["logged_in"]) for s, cfg in SITES.items()}
+    futures = {s: pool.submit(_logged_in_cached, s) for s in SITES}
     out = {}
     for s, f in futures.items():
         proc = login_procs.get(s)
@@ -262,9 +281,8 @@ class Handler(BaseHTTPRequestHandler):
                     qty = int(d.get("qty") or 1)
                     if not 1 <= qty <= 999:
                         return self.send_json({"error": "Ongeldig aantal"}, 400)
-                    cart.add(d["item"], qty)
-                else:
-                    cart.remove(d["line"])
+                    return self.send_json({"ok": True, "cart": carts.add_checked(cart, d["item"], qty)})
+                cart.remove(d["line"])
                 return self.send_json({"ok": True, "cart": cart.read()})
             except carts.CartError as e:
                 return self.send_json({"error": str(e)}, 400)
@@ -277,13 +295,21 @@ class Handler(BaseHTTPRequestHandler):
         action, site = parts[1], parts[2]
         if action == "login":
             proc = login_procs.get(site)
+            stop = sites.SESSIONS / f"{site}.stop"
             if proc is not None and proc.poll() is None:
-                # al een loginvenster open (misschien verdwenen/achter iets): opnieuw beginnen
-                proc.terminate()
+                # al een loginvenster open (misschien verdwenen/achter iets): opnieuw beginnen.
+                # Eerst netjes laten stoppen via een stopbestand: op Windows is terminate() hard
+                # (geen finally in login.py), dan blijft de browser het profiel vasthouden.
+                stop.touch()
                 try:
                     proc.wait(8)
                 except subprocess.TimeoutExpired:
-                    proc.kill()
+                    proc.terminate()
+                    try:
+                        proc.wait(5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+            stop.unlink(missing_ok=True)
             if sys.platform == "win32":
                 # Windows laat een venster van een ander programma normaal niet naar voren komen;
                 # de app (die net aangeklikt werd) mag die toestemming wel geven.

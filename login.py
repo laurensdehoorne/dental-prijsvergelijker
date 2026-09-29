@@ -208,11 +208,12 @@ def watchdog(chrome, port, site):
     """Vangnet naast de hoofdlus: als het venster dicht is (of nooit opende), alles
     afsluiten, ook als Playwright ergens blijft wachten op een gesloten pagina."""
     started, seen = time.time(), False
+    stop = SESSIONS / f"{site}.stop"
     while alive(chrome, port):
         time.sleep(2)
         tabs = open_tabs(port)
         seen = seen or tabs > 0
-        if (seen and tabs == 0) or (not seen and time.time() - started > 25):
+        if (seen and tabs == 0) or (not seen and time.time() - started > 25) or stop.exists():
             time.sleep(3)  # hoofdlus de kans geven om zelf netjes te stoppen
             if chrome.poll() is None:
                 chrome.terminate()
@@ -235,6 +236,8 @@ def main(site):
     SESSIONS.mkdir(exist_ok=True)
     PROFILES.mkdir(exist_ok=True)
     out = SESSIONS / f"{site}.pending.json"  # pas bij sluiten in gebruik (zie finalize)
+    stop = SESSIONS / f"{site}.stop"  # de app vraagt zo netjes te stoppen ('Opnieuw openen')
+    stop.unlink(missing_ok=True)
     port = free_port()
 
     chrome = subprocess.Popen([
@@ -293,6 +296,8 @@ def main(site):
                             pass
                 if tabs == 0 and seen_page:
                     break  # venster gesloten (Chrome blijft op Mac soms draaien)
+                if stop.exists():
+                    break  # app opent een nieuw loginvenster: browser sluiten en sessie afwerken
                 if not seen_page and time.time() - started > 20:
                     break  # Chrome opende geen venster: opgeven i.p.v. blijven hangen
                 ctx = browser.contexts[0] if browser.contexts else None

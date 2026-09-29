@@ -23,11 +23,17 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
   (gegevensmap): meteen getoond, ouder dan 30 min = op de achtergrond vernieuwd (`lists_lock`: nooit
   dubbel); mislukt een winkel, dan blijft zijn vorige lijst staan. De UI laadt ze bij opstarten voor het label "eerder besteld" (match op site+artikelnr óf productlink).
 - `carts.py` — winkelmandje toevoegen/uitlezen/verwijderen per winkel. **Nooit bestellen.**
+  Toevoegen loopt via `add_checked()`: aantal stuks moet stijgen, anders CartError (winkels
+  falen soms stil, bv. Denta stuurt door naar /account/logout bij een half verlopen sessie).
+  Henry Schein: regel-id (hdnItemId) per artikelnummer koppelen (`data-item-code-cart`), niet op volgorde.
 - `login.py` — start een *gewone* Chrome (anders Edge) met `--remote-debugging-port` en een
   eigen profiel per winkel; Playwright `connect_over_cdp` leest elke ~2 s cookies
   (`Storage.getCookies`, fallback `Network.getAllCookies`) + localStorage en schrijft
   `sessions/<site>.json`. Venster sluiten = klaar. Een watchdog-thread sluit alles af als
   het venster dicht is of er na 25 s geen tabblad is. Wachtwoorden worden nooit gelezen.
+  'Opnieuw openen': de app maakt `sessions/<site>.stop` aan en wacht; login.py stopt dan netjes
+  (browser dicht + finalize). Nodig op Windows, waar terminate() hard is.
+- `app.py` `status()`: "ingelogd?" max. 1×/min per winkel, meteen opnieuw als het sessiebestand wijzigt.
 - `paths.py` — gegevensmap: Mac `~/Library/Application Support/Prijsvergelijker`,
   Windows `%APPDATA%\Prijsvergelijker` (sessions/, profiles/, favorites.json,
   settings.json, log.txt). In de ingepakte app: `SSL_CERT_FILE` = certifi (anders
@@ -35,7 +41,9 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
 - `favsync.py` — Mijn lijst + verzendinstellingen synchroniseren via een gekozen map (iCloud Drive,
   Google Drive, …; keuze in `sync.json`, bestanden in `<map>/Prijsvergelijker/`). Driewegs samenvoegen
   met `favorites.base.json` (= stand bij vorige sync). Logins/sessies gaan nooit mee. De UI bewaart
-  één voor één (`favChain`) en haalt wijzigingen op bij focus van het venster.
+  één voor één (`favChain`) en haalt wijzigingen op bij focus van het venster. Het gedeelde bestand
+  wordt enkel geschreven als er echt iets verandert (anders overschrijft een verouderde cloudkopie
+  nieuwere wijzigingen). De UI bewaart pas na het eerste geslaagde laden (`favsLoaded`).
 - `static/index.html` — hele UI (vanilla JS).
 - Release: `prijsvergelijker.spec` (PyInstaller) + `.github/workflows/release.yml`
   (tag `vX.Y.Z` pushen). Versie staat in `paths.py`. Mac wordt apart gebouwd voor

@@ -203,6 +203,8 @@ class Denta:
 
     def add(self, item, qty):
         # zoals de knop 'In winkelmandje' op de productpagina: eerst de pagina lezen
+        if urllib.parse.urlparse(item.get("url") or "").netloc != "www.denta.be":
+            raise CartError("Denta: onbekende productlink.")  # sessiecookies nooit naar een andere site
         _, page = http_get(item["url"], {"Cookie": self._ck()})
         # gewoon artikel (/artikel/...) of één variant van een artikel (/variant-artikel/..., bv. een maat)
         ap = re.search(r'<[^>]+id="AddProduct"[^>]*>', page)
@@ -292,21 +294,45 @@ class HenrySchein:
         if "not-loggedin" in page:
             raise CartError("Henry Schein-login verlopen: log opnieuw in.")
         m = re.search(r"'event' : 'view_cart'[\s\S]*?'items': \[([\s\S]*?)\]\s*\}", page)
-        lines = re.findall(r'hdnItemId" value="([^"]+)"', page)
+        # regel-id per artikelnummer (zelfde rptBasket_ctlNN-blok), niet op volgorde: anders kan
+        # een gratis/promoregel de koppeling verschuiven en verwijdert ✕ een ander product
+        codes = dict(re.findall(r'rptBasket_(ctl\d+)_txtQuantity"[^>]*data-item-code-cart="([^"]+)"', page))
+        lines = {}
+        for ctl, line_id in re.findall(r'rptBasket_(ctl\d+)_hdnItemId" value="([^"]+)"', page):
+            if ctl in codes:
+                lines.setdefault(codes[ctl], []).append(line_id)
         items = []
-        for i, obj in enumerate(re.findall(r'\{([^{}]*)\}', m.group(1) if m else "")):
-            f = dict(re.findall(r"'(\w+)'\s*:\s*'?([^',]*)'?", obj))
+        for obj in re.findall(r'\{([^{}]*)\}', m.group(1) if m else ""):
+            # waarden tussen quotes volledig (namen bevatten komma's), andere tot de volgende komma
+            f = {k: a if a or not b else b for k, a, b in
+                 re.findall(r"'(\w+)'\s*:\s*(?:'((?:[^'\\]|\\.)*)'|([^,}\s]+))", obj)}
             qty = int(float(f.get("quantity", 1) or 1))
             unit = float(f["price"]) if f.get("price") else None
-            items.append({"code": f.get("item_id", ""), "name": html.unescape(f.get("item_name", "")),
+            code = f.get("item_id", "")
+            same = lines.get(code) or []
+            items.append({"code": code, "name": html.unescape(f.get("item_name", "").replace("\\'", "'")),
                           "qty": qty, "unit": unit, "total": round(unit * qty, 2) if unit else None,
-                          "line": lines[i] if i < len(lines) else ""})
+                          "line": same.pop(0) if same else ""})
         return {"items": items, "subtotal": round(sum(i["total"] or 0 for i in items), 2),
                 "free_shipping_left": None, "url": self.url}
 
     def remove(self, line):
         self._json({"lineItemId": line, "cartId": "", "userId": "", "did": "dental", "catalogName": "WEBDENT",
                     "endecaCatalogName": "WEBDENT", "searchType": 12, "culture": "be-nl"}, self.url)
+
+
+def add_checked(cart, item, qty):
+    """In het mandje leggen en controleren dat het er echt in zit (aantal stuks moet stijgen):
+    sommige winkels melden geen fout (bv. Denta stuurt bij een verlopen sessie door naar de
+    loginpagina, Ordent negeert niet-bestelbare producten)."""
+    count = lambda c: sum(i.get("qty") or 0 for i in c["items"])
+    before = count(cart.read())
+    cart.add(item, qty)
+    after = cart.read()
+    if count(after) <= before:
+        raise CartError(f"{cart.label}: het product staat niet in je mandje. Log opnieuw in of "
+                        "open de productpagina (misschien niet bestelbaar of enkel per verpakking).")
+    return after
 
 
 CARTS = {

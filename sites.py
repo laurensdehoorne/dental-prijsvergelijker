@@ -676,6 +676,6 @@ def refresh(site, code, name, cache=None, url=""):
             except Exception:
                 cache[key] = []
         for it in cache[key]:
-            if it["code"] == code or (url and clean(it["url"]) == clean(url)):
+            if (code and it["code"] == code) or (url and clean(it["url"]) == clean(url)):
                 return it
     return None
