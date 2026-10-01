@@ -6,6 +6,7 @@ localStorage) worden bewaard door login.py in sessions/<site>.json.
 import html
 import json
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -410,12 +411,16 @@ def _denta_fetch(url):
 
 
 DENTA_LOGIN_LINK = 'href="/aanmelden/"'
+DENTA_LOGIN_GRACE = 300  # s: zo lang na inloggen toont Denta soms nog geen prijzen
 
 
 def denta_logged_in():
     """Ingelogd = de winkel toont prijzen. Enkel 'geen aanmeldlink op de startpagina' was te
     zwak: de app zei dan 'aangemeld' terwijl Denta de sessie niet (meer) aanvaardde, waardoor
-    zoeken geen prijzen gaf en het mandje leeg leek."""
+    zoeken geen prijzen gaf en het mandje leeg leek.
+    Net na inloggen (sessiebestand < 5 min oud) toont Denta soms nog even geen prijzen terwijl
+    het account al herkend wordt: dan toch 'ingelogd' (anders zou login.finalize() de nieuwe
+    sessie weggooien); de controle 1×/min in app.py geeft daarna het echte antwoord."""
     if not cookie_header("denta", "denta.be"):
         return False
     try:
@@ -428,6 +433,13 @@ def denta_logged_in():
         return False
     products = body.count('<div class="single-product-item"')
     if products and 'class="gtm-price">' not in body:
+        try:
+            age = time.time() - (SESSIONS / "denta.json").stat().st_mtime
+        except OSError:
+            age = DENTA_LOGIN_GRACE
+        if age < DENTA_LOGIN_GRACE:
+            print(f"[denta] net ingelogd, nog geen prijzen ({int(age)} s): even wachten", flush=True)
+            return True
         print(f"[denta] niet ingelogd: {products} zoekresultaten zonder prijs", flush=True)
         return False
     return True

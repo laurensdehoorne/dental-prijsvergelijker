@@ -17,6 +17,8 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
   `volume_price`/`volume_qty` (bv. Isodam vanaf 6 st.); zonder staffels (varianten) → `from_price`.
   Ingelogd-check Denta: geen aanmeldlink op de startpagina **én** zoekresultaten met prijs
   (enkel de aanmeldlink gaf vals "aangemeld"); mandje met aanmeldlink → CartError i.p.v. stil leeg.
+  Net na inloggen (sessiebestand < 5 min oud, `DENTA_LOGIN_GRACE`) toont Denta soms nog even geen
+  prijzen: dan toch "ingelogd" (anders gooit `finalize()` de nieuwe sessie weg).
 - Winkellijsten (`/api/lists`, tab 📋): per winkel `SITES[site]["lists"]()` → `[{name, items, ordered}]`.
   Ordent (DD/Hofmeester/ADT): `ajax/products.php?page_type=ordered|wishlist` (per 48); Basiq: bewaarde
   mandjes + afnamelijst uit laatste 60 bestellingen (OCC-API); Denta: `/artikelgeschiedenis/` (zonder prijzen: die komen van de productpagina's,
