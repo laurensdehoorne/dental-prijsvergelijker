@@ -241,6 +241,8 @@ class Denta:
 
     def read(self):
         _, page = http_get(self.url, {"Cookie": self._ck()})
+        if sites.DENTA_LOGIN_LINK in page:  # anders lijkt het mandje stil leeg
+            raise CartError("Denta-login verlopen: log opnieuw in.")
         items = []
         for b in page.split('<div class="gtm-product product">')[1:]:
             no = re.search(r'gtm-product-number">\s*([^<]+?)\s*<', b)

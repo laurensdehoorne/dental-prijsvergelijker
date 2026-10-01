@@ -409,13 +409,28 @@ def _denta_fetch(url):
     return _denta_anon.get(url)
 
 
+DENTA_LOGIN_LINK = 'href="/aanmelden/"'
+
+
 def denta_logged_in():
+    """Ingelogd = de winkel toont prijzen. Enkel 'geen aanmeldlink op de startpagina' was te
+    zwak: de app zei dan 'aangemeld' terwijl Denta de sessie niet (meer) aanvaardde, waardoor
+    zoeken geen prijzen gaf en het mandje leeg leek."""
     if not cookie_header("denta", "denta.be"):
         return False
     try:
-        return 'href="/aanmelden/"' not in _denta_fetch(DENTA_BASE + "/")
-    except Exception:
+        if DENTA_LOGIN_LINK in _denta_fetch(DENTA_BASE + "/"):
+            print("[denta] niet ingelogd: startpagina toont 'aanmelden'", flush=True)
+            return False
+        body = _denta_fetch(DENTA_BASE + "/zoeken/handschoenen/")
+    except Exception as e:
+        print(f"[denta] ingelogd-controle mislukt: {e}", flush=True)
         return False
+    products = body.count('<div class="single-product-item"')
+    if products and 'class="gtm-price">' not in body:
+        print(f"[denta] niet ingelogd: {products} zoekresultaten zonder prijs", flush=True)
+        return False
+    return True
 
 
 def denta_search(query):
@@ -446,6 +461,21 @@ def denta_search(query):
         ))
         if price and "price-from-label" in b:
             items[-1]["from_price"] = True
+    # 'Vanaf' is vaak een staffelprijs (bv. Isodam: vanaf 6 st.): de productpagina geeft de
+    # stukprijs en de staffel. Zonder staffels (verpakkingen/varianten) blijft het 'vanaf'.
+    def staffel(it):
+        try:
+            p = _denta_price(it["url"])
+        except Exception:
+            return it
+        if not p.get("volume_price"):
+            return it
+        new = item("denta", code=it["code"], name=it["name"], pack=it["pack"], brand=it["brand"],
+                   url=it["url"], image=it["image"], **p)
+        return new if new["volume_price"] else it
+    if any(it.get("from_price") for it in items):
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            items = list(ex.map(lambda it: staffel(it) if it.get("from_price") else it, items))
     return items
 
 

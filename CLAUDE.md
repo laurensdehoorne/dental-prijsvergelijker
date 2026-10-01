@@ -12,8 +12,11 @@ producten rechtstreeks in hun winkelmandje kan leggen. Gebruiker: tandarts
   `/api/carts`, `/api/cart/add|remove`, `/api/favorites`, `/api/settings`).
 - `sites.py` — zoeken + "ben ik ingelogd?" per winkel (urllib, cookies uit sessiebestand).
   Let op: Hofmeester toont "Uitloggen" ook aan wie niet ingelogd is; Ordent-check = geen "Inloggen".
-  Denta: zoekresultaten gebruiken het fabrikantnummer (niet het A-nummer); prijs uit `gtm-price`
-  (bij varianten met "Vanaf" → `from_price`).
+  Denta: zoekresultaten gebruiken het fabrikantnummer (niet het A-nummer); prijs uit `gtm-price`.
+  Bij "Vanaf" leest `denta_search` de productpagina (`_denta_price`): staffels → stukprijs +
+  `volume_price`/`volume_qty` (bv. Isodam vanaf 6 st.); zonder staffels (varianten) → `from_price`.
+  Ingelogd-check Denta: geen aanmeldlink op de startpagina **én** zoekresultaten met prijs
+  (enkel de aanmeldlink gaf vals "aangemeld"); mandje met aanmeldlink → CartError i.p.v. stil leeg.
 - Winkellijsten (`/api/lists`, tab 📋): per winkel `SITES[site]["lists"]()` → `[{name, items, ordered}]`.
   Ordent (DD/Hofmeester/ADT): `ajax/products.php?page_type=ordered|wishlist` (per 48); Basiq: bewaarde
   mandjes + afnamelijst uit laatste 60 bestellingen (OCC-API); Denta: `/artikelgeschiedenis/` (zonder prijzen: die komen van de productpagina's,
